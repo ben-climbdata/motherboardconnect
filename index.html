@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1013">
+<title>Motherboard 행보드 트레이너</title>
+<style>
+  :root {
+    --bg: #0B1013;
+    --surface: #161E23;
+    --surface2: #1D272D;
+    --line: #24313A;
+    --ink: #E8EDEF;
+    --muted: #6E828C;
+    --band: #5CD6A8;
+    --under: #FF6B6B;
+    --over: #F2B441;
+    --accent: #4FA7FF;
+    --blue: #1AA7FF;
+    --green: #33D48F;
+    --wash: transparent;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+                 "Apple SD Gothic Neo", "Malgun Gothic", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+    transition: background-color .18s linear;
+    background-color: var(--wash);
+  }
+
+  /* ---- status strip ---------------------------------------------------- */
+  .strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.live { background: var(--band); }
+  .strip .spacer { flex: 1; }
+
+  /* ---- tabs ------------------------------------------------------------ */
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tabs button {
+    flex: 1;
+    padding: 11px 0;
+    font: inherit; font-size: 14px; font-weight: 600;
+    color: var(--muted);
+    background: transparent;
+    border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+    cursor: pointer;
+  }
+  .tabs button.on { color: var(--ink); border-bottom-color: var(--band); }
+
+  .tab { display: none; }
+  .tab.on { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+
+  /* ---- training header --------------------------------------------------- */
+  .wsel-row { display: flex; gap: 8px; align-items: center; padding: 10px 16px 0; }
+  .wsel-row select { flex: 1; }
+  .gripline { padding: 8px 16px 0; font-size: 14px; color: var(--accent); font-weight: 600; min-height: 26px; line-height: 1.4; }
+  .gripline small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+
+  /* ---- set / rep row ----------------------------------------------------- */
+  .setrep { display: flex; padding: 8px 16px 2px; font-variant-numeric: tabular-nums; }
+  .setrep > div { flex: 1; text-align: center; }
+  .setrep .lbl { display: block; font-size: 12px; letter-spacing: .12em; color: var(--muted); font-weight: 600; }
+  .setrep .v { font-size: 30px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+  .setrep .v b { color: var(--blue); font-weight: 800; }
+  .setrep .v span { color: var(--muted); font-weight: 600; margin: 0 4px; }
+
+  /* ---- hero: trace + arcs + timer ---------------------------------------- */
+  .stage { flex: 1; display: flex; flex-direction: column; padding: 2px 8px 6px; min-height: 0; }
+  .hero {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    min-height: 220px;
+    max-height: 62vh;
+    overflow: hidden;
+    border-radius: 6px;
+  }
+  @media (min-width: 700px) { .hero { min-height: 340px; } }
+  .hero canvas, .hero svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .heroCenter {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .phaseLbl { font-size: 14px; font-weight: 700; letter-spacing: .06em; color: #B7C4CB; margin-bottom: 2px; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+  .timer {
+    font-size: clamp(56px, 16vw, 128px);
+    font-weight: 800; line-height: .9; letter-spacing: -.045em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    text-shadow: 0 2px 14px rgba(0,0,0,.55);
+  }
+  .timer.dim { color: var(--muted); }
+  .loadpill {
+    position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+    padding: 6px 16px 7px;
+    border-radius: 10px;
+    background: rgba(11,16,19,.78);
+    border: 1px solid var(--line);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    transition: border-color .12s;
+    white-space: nowrap;
+  }
+  .loadpill .lv { font-size: 26px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+  .loadpill .lv .unit { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+  .loadpill .ls { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .loadpill.in { border-color: var(--green); }
+  .loadpill.under { border-color: var(--under); }
+  .loadpill.over { border-color: var(--over); }
+  .loadpill.in .ls { color: var(--green); }
+  .loadpill.under .ls { color: var(--under); }
+  .loadpill.over .ls { color: var(--over); }
+
+  /* ---- controls -------------------------------------------------------- */
+  .controls { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  button {
+    flex: 1;
+    padding: 15px 10px;
+    font: inherit; font-size: 15px; font-weight: 650;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.stop { background: transparent; color: var(--under); border-color: var(--under); }
+  button.danger { color: var(--under); }
+  button.sm { flex: none; padding: 8px 12px; font-size: 13px; }
+  button.xs { flex: none; padding: 4px 9px; font-size: 12px; }
+  button:disabled { opacity: .35; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--band); outline-offset: 2px; }
+
+  /* ---- settings / forms ---------------------------------------------- */
+  details { border-top: 1px solid var(--line); }
+  summary { padding: 13px 16px; font-size: 14px; color: var(--muted); cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; padding: 0 16px 16px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  input[type=number], input[type=text], input[type=date], select, textarea {
+    width: 100%;
+    padding: 10px;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; min-height: 160px; resize: vertical; }
+  select { -webkit-appearance: none; appearance: none; }
+  input, select { min-width: 0; }
+  .row > div, .fields > div, .grid > div { min-width: 0; }
+  input[type=range] { width: 100%; accent-color: var(--band); }
+  .note { padding: 0 16px 16px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+  .inlinebtns { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 16px; }
+
+  .toast { padding: 11px 16px; font-size: 13.5px; line-height: 1.5; background: var(--surface); border-bottom: 1px solid var(--line); color: var(--over); }
+  .toast:empty { display: none; }
+
+  /* ---- generic page pieces ------------------------------------------- */
+  .page { padding: 14px 16px 24px; width: 100%; max-width: 900px; margin: 0 auto; }
+  .h { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 12px; }
+  .h .title { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+  .h .sub { font-size: 13px; color: var(--muted); }
+  .h .spacer { flex: 1; }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .row > div { flex: 1; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+  .card .name { font-size: 16px; font-weight: 700; }
+  .card .meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+  .card .actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .card.selected { border-color: var(--band); }
+  .empty { color: var(--muted); font-size: 13.5px; padding: 20px 0; text-align: center; }
+
+  /* set editor */
+  .setcard { background: var(--surface2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+  .setcard .sethead { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .setcard .sethead .n { font-weight: 700; font-size: 14px; flex: 1; }
+  .setcard .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+  .setcard input, .setcard select { background: var(--surface); padding: 8px; font-size: 14px; }
+  .same { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+  .same input { width: 16px; height: 16px; accent-color: var(--band); margin: 0; }
+  .hands { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .hands.one { grid-template-columns: 1fr; }
+  .hand { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .hand .ht { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+  .hand .ht b { color: var(--ink); }
+  .holdbtn {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 8px 10px; font-size: 13.5px; font-weight: 600; text-align: left;
+    background: var(--surface2); border-color: var(--line); line-height: 1.3;
+  }
+  .holdbtn .hn { flex: 1; }
+  .holdbtn .hn.none { color: var(--muted); font-weight: 400; }
+  .holdbtn .arrow { color: var(--muted); font-size: 11px; font-weight: 400; flex: none; }
+  .targetcell { grid-column: span 2; }
+  .unitrow { display: flex; gap: 6px; }
+  .unitrow input { flex: 1; min-width: 60px; }
+  .unitrow select { width: 92px; flex: none; }
+
+  /* ---- overlays ----------------------------------------------------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(5, 8, 10, .82);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .overlay[hidden] { display: none; }
+  .picker {
+    width: 100%; max-width: 720px; max-height: 100%;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .picker .h { margin: 0 0 8px; }
+  .picker svg { width: 100%; height: auto; display: block; touch-action: manipulation; }
+  .picker .hold { cursor: pointer; }
+  .picker .hold:hover { filter: brightness(1.2); }
+  .picker .hold.sel { stroke: var(--band); stroke-width: 7; }
+  .picker .hold.selo { stroke: var(--band); stroke-width: 3; stroke-dasharray: 8 6; }
+  .picker .hint { font-size: 12.5px; color: var(--muted); margin: 8px 0 10px; line-height: 1.5; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { flex: none; padding: 7px 11px; font-size: 13px; font-weight: 500; }
+  .chips button.sel { border-color: var(--band); color: var(--band); }
+
+  /* ---- calendar ------------------------------------------------------ */
+  .calhead { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .calhead .mon { font-size: 20px; font-weight: 800; flex: 1; letter-spacing: -.02em; }
+  .calgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px 2px; }
+  .calgrid .wd { text-align: center; font-size: 12px; color: var(--muted); padding: 4px 0 6px; }
+  .calgrid .day { position: relative; text-align: center; padding: 4px 0 12px; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
+  .calgrid .day .n { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; font-size: 15px; font-weight: 600; }
+  .calgrid .day.other .n { color: var(--muted); opacity: .45; }
+  .calgrid .day.done .n { background: var(--green); color: #06231A; }
+  .calgrid .day.today .n { box-shadow: inset 0 0 0 2px var(--accent); }
+  .calgrid .day.sel { border-color: var(--accent); background: rgba(79,167,255,.08); }
+  .calgrid .day .dots { position: absolute; left: 0; right: 0; bottom: 3px; display: flex; justify-content: center; gap: 3px; }
+  .calgrid .day .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .calgrid .day .dots i.w { background: var(--over); }
+  .daypanel { margin-top: 14px; }
+  .daypanel .dh { font-size: 12px; letter-spacing: .1em; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+  .sess .name { font-size: 15px; font-weight: 700; }
+  .sess .meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.55; }
+  .sess .stats { display: flex; gap: 14px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .sess .stats div { font-size: 12px; color: var(--muted); }
+  .sess .stats b { display: block; font-size: 17px; color: var(--ink); font-weight: 800; }
+  .legend { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; gap: 12px; align-items: center; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+  /* ---- weight ---------------------------------------------------------- */
+  .bigkg { font-size: 44px; font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .bigkg small { font-size: 16px; color: var(--muted); font-weight: 600; margin-left: 4px; }
+  #wchart { width: 100%; height: clamp(220px, 42vw, 380px); margin: 12px 0 6px; display: block; }
+  .wlist { border-top: 1px solid var(--line); margin-top: 8px; }
+  .wlist .item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .wlist .item .d { color: var(--muted); flex: 1; }
+  .wlist .item .k { font-weight: 700; }
+  .wlist .item .diff { font-size: 12px; color: var(--muted); width: 52px; text-align: right; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="strip">
+  <span class="dot" id="dot"></span>
+  <span id="status">연결 안 됨</span>
+  <span class="spacer"></span>
+  <span id="battery"></span>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<nav class="tabs">
+  <button data-tab="train" class="on">훈련</button>
+  <button data-tab="workouts">워크아웃</button>
+  <button data-tab="log">기록</button>
+  <button data-tab="weight">체중</button>
+</nav>
+
+<!-- ================================================================== -->
+<section class="tab on" id="tab-train">
+  <div class="wsel-row">
+    <select id="wsel"><option value="">빠른 훈련 (설정값 사용)</option></select>
+  </div>
+  <div class="gripline" id="gripLine"></div>
+
+  <div class="setrep">
+    <div><span class="lbl">SET</span><div class="v"><b id="srSet">–</b><span>/</span><em id="srSets" style="font-style:normal">–</em></div></div>
+    <div><span class="lbl">REP</span><div class="v"><b id="srRep">–</b><span>/</span><em id="srReps" style="font-style:normal">–</em></div></div>
+  </div>
+
+  <div class="stage">
+    <div class="hero" id="hero">
+      <canvas id="trace"></canvas>
+      <svg id="heroSvg" viewBox="0 0 400 225" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+      <div class="heroCenter">
+        <div class="phaseLbl" id="phaseLbl">대기</div>
+        <div class="timer dim" id="timer">—</div>
+      </div>
+      <div class="loadpill" id="loadpill">
+        <div class="lv"><span id="force">—</span><span class="unit">kg</span></div>
+        <div class="ls" id="loadSub"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="btnConnect" class="primary">기기 연결</button>
+    <button id="btnTare" disabled>영점</button>
+    <button id="btnStart" disabled>시작</button>
+  </div>
+
+  <details>
+    <summary>설정 (빠른 훈련 · 공통)</summary>
+    <div class="fields">
+      <div><label for="target">목표 무게 (kg)</label><input type="number" id="target" value="40" step="0.5" min="0"></div>
+      <div><label for="tol">허용 오차 (± kg)</label><input type="number" id="tol" value="3" step="0.5" min="0.5"></div>
+      <div><label for="hang">매달림 (초)</label><input type="number" id="hang" value="7" step="1" min="1"></div>
+      <div><label for="rest">휴식 (초)</label><input type="number" id="rest" value="3" step="1" min="1"></div>
+      <div><label for="reps">반복 (회)</label><input type="number" id="reps" value="6" step="1" min="1"></div>
+      <div><label for="sets">세트 (회)</label><input type="number" id="sets" value="3" step="1" min="1"></div>
+      <div><label for="setrest">세트 간 휴식 (초)</label><input type="number" id="setrest" value="120" step="10" min="5"></div>
+      <div><label for="vol">소리 크기</label><input type="range" id="vol" min="0" max="100" value="35"></div>
+    </div>
+    <div class="note">
+      목표 범위 안에 있으면 조용합니다. 모자라면 낮은 음, 넘치면 높은 음이 납니다.
+      매달림 구간에서만 울리고 휴식 중에는 울리지 않습니다. 허용 오차와 소리 크기는 워크아웃에도 공통 적용됩니다.<br>
+      그래프의 초록 띠가 목표 범위이고, 선은 목표보다 낮으면 빨강, 높으면 노랑입니다. 양쪽 원호는 손마다 목표의 절반을 가운데(100%)로 놓고 50~150% 범위를 보여줍니다.<br><br>
+      영점은 손을 떼고 누른 뒤 잡으세요. 기기 캘리브레이션을 못 받았을 때는
+      아는 무게를 걸고 <button type="button" id="btnManual" class="xs" style="display:inline">수동 보정</button>을 누르면 됩니다.
+    </div>
+    <div class="note" id="diag" style="font-variant-numeric:tabular-nums"></div>
+    <div class="inlinebtns">
+      <button type="button" class="sm" id="btnExport">데이터 내보내기</button>
+      <button type="button" class="sm" id="btnImport">데이터 가져오기</button>
+    </div>
+    <div class="note">워크아웃·훈련 기록·체중은 이 브라우저 안에만 저장됩니다. 다른 기기(아이패드 등)로 옮길 때는 내보내기로 복사한 뒤 그쪽에서 가져오기에 붙여 넣으세요.</div>
+  </details>
+</section>
+
+<!-- ================================================================== -->
+<section class="tab" id="tab-workouts">
+  <div class="page" id="wlistPage">
+    <div class="h">
+      <span class="title">워크아웃</span>
+      <span class="sub">Beastmaker 1000</span>
+      <span class="spacer"></span>
+      <button class="sm primary" id="btnNewWorkout">+ 새 워크아웃</button>
+    </div>
+    <div id="wlist"></div>
+  </div>
+
+  <div class="page" id="weditor" hidden>
+    <div class="h">
+      <span class="title" id="wedTitle">새 워크아웃</span>
+      <span class="spacer"></span>
+      <button class="sm" id="btnWedCancel">취소</button>
+      <button class="sm primary" id="btnWedSave">저장</button>
+    </div>
+    <div style="margin-bottom:14px">
+      <label for="wedName">이름</label>
+      <input type="text" id="wedName" placeholder="예: 20mm 리피터">
+    </div>
+    <div id="wedSets"></div>
+    <div class="row" style="margin-top:4px">
+      <button class="sm" id="btnAddSet" style="flex:1">+ 세트 추가</button>
+    </div>
+    <div class="note" style="padding:14px 0 0">
+      <b>홀드</b>는 보드 위의 위치(깊이), <b>그립</b>은 어떤 손가락으로 잡는지입니다. "양손 동일"을 끄면 왼손과 오른손을 따로 정할 수 있습니다.
+      목표 단위를 <b>%체중</b>으로 두면 체중 탭의 최근 기록을 기준으로 kg을 계산합니다.
+      세트 휴식은 그 세트가 끝난 뒤 쉬는 시간입니다.
+    </div>
+  </div>
+</section>
+
+<!-- hold picker overlay -->
+<div class="overlay" id="holdOverlay" hidden>
+  <div class="picker">
+    <div class="h">
+      <span class="title" style="font-size:17px" id="holdTitle">홀드 선택</span>
+      <span class="sub">Beastmaker 1000</span>
+      <span class="spacer"></span>
+      <button class="sm" id="btnHoldClose">닫기</button>
+    </div>
+    <svg id="boardSvg" viewBox="0 0 1000 350" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="hint" id="holdHint"></div>
+    <div class="chips" id="holdChips"></div>
+  </div>
+</div>
+
+<!-- data export / import overlay -->
+<div class="overlay" id="dataOverlay" hidden>
+  <div class="picker">
+    <div class="h">
+      <span class="title" style="font-size:17px" id="dataTitle">데이터 내보내기</span>
+      <span class="spacer"></span>
+      <button class="sm" id="btnDataClose">닫기</button>
+    </div>
+    <div class="hint" id="dataHint"></div>
+    <textarea id="dataText" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="sm" id="btnDataCopy" style="flex:1">복사</button>
+      <button class="sm primary" id="btnDataApply" style="flex:1">가져오기 적용</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================== -->
+<section class="tab" id="tab-log">
+  <div class="page">
+    <div class="calhead">
+      <button class="sm" id="calPrev">‹</button>
+      <span class="mon" id="calMon"></span>
+      <button class="sm" id="calToday">오늘</button>
+      <button class="sm" id="calNext">›</button>
+    </div>
+    <div class="calgrid" id="calGrid"></div>
+    <div class="legend"><span><i style="background:var(--green)"></i>훈련한 날</span><span><i style="background:var(--over)"></i>체중 기록</span></div>
+    <div class="daypanel" id="dayPanel"></div>
+  </div>
+</section>
+
+<!-- ================================================================== -->
+<section class="tab" id="tab-weight">
+  <div class="page">
+    <div class="h">
+      <span class="title">체중</span>
+      <span class="sub" id="wLastDate"></span>
+      <span class="spacer"></span>
+      <span class="bigkg" id="wLatest">—<small>kg</small></span>
+    </div>
+
+    <div class="row">
+      <div><label for="wDate">날짜</label><input type="date" id="wDate"></div>
+      <div><label for="wKg">체중 (kg)</label><input type="number" id="wKg" step="0.1" min="20" max="250" placeholder="76.2"></div>
+      <button class="sm primary" id="btnWSave" style="padding:11px 14px">저장</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="sm" id="btnWMeasure" disabled style="flex:1">보드에 매달려서 측정</button>
+    </div>
+    <div class="note" style="padding:8px 0 0" id="wMeasureNote">
+      기기를 연결하면 보드에 팔을 편 채 매달려 체중을 잴 수 있습니다. 버튼을 누르고 3초 뒤부터 2초간 평균을 냅니다.
+    </div>
+
+    <canvas id="wchart"></canvas>
+    <div class="note" style="padding:0" id="wRange"></div>
+
+    <div class="wlist" id="wEntries"></div>
+  </div>
+</section>
+
+<script>
+'use strict';
+
+/* ------------------------------------------------------------------ *
+ * Griptonite / Beastmaker Motherboard — BLE protocol (Nordic UART)
+ * ------------------------------------------------------------------ */
+var NUS  = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+var RXCH = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+var TXCH = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+var SAMPLE_RATE = 30;
+
+/* Sensor polarity: 3 load cells (0 left, 1 centre, 2 right); the fourth ADC
+ * slot is unused. Sensors 1 and 2 read negative under load. */
+var POLARITY = [1, -1, -1, 0];
+var NSENSORS = 3;
+
+var $ = function (id) { return document.getElementById(id); };
+
+var dev = null, rxChar = null, txChar = null;
+var lineBuf = '';
+var cal = [[], [], [], []];
+var calLines = 0;
+var haveCal = false;
+var manualScale = null;
+var tareRaw = [0, 0, 0, 0];
+var lastAdc = [0, 0, 0, 0];
+var live = { total: 0, left: 0, right: 0, sensors: [0, 0, 0], battery: null, t: 0 };
+var connected = false;
+
+/* ---- storage ---------------------------------------------------------- */
+
+function load(key, def) {
+  try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : def; }
+  catch (e) { return def; }
+}
+function store(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* ignore */ } }
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+function dateStr(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function todayStr() { return dateStr(new Date()); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function num(v, def) { var n = parseFloat(v); return isFinite(n) ? n : def; }
+
+/* ---- connection ---------------------------------------------------- */
+
+function setStatus(text, isLive) {
+  $('status').textContent = text;
+  $('dot').className = 'dot' + (isLive ? ' live' : '');
+}
+function toast(msg) { $('toast').textContent = msg || ''; }
+function readingAvailable() { return connected && (haveCal || manualScale !== null); }
+
+async function connect() {
+  if (!navigator.bluetooth) {
+    toast('이 브라우저는 Web Bluetooth를 지원하지 않습니다. 안드로이드는 크롬, 아이폰/아이패드는 Bluefy를 쓰세요.');
+    return;
+  }
+  try {
+    setStatus('기기 찾는 중…');
+    dev = await navigator.bluetooth.requestDevice({ filters: [{ name: 'Motherboard' }], optionalServices: [NUS] });
+    dev.addEventListener('gattserverdisconnected', onDisconnect);
+    setStatus('연결 중…');
+    var server = await dev.gatt.connect();
+    var svc = await server.getPrimaryService(NUS);
+    txChar = await svc.getCharacteristic(TXCH);
+    rxChar = await svc.getCharacteristic(RXCH);
+    await txChar.startNotifications();
+    txChar.addEventListener('characteristicvaluechanged', onNotify);
+    connected = true;
+    $('btnConnect').textContent = '연결 해제';
+    $('btnTare').disabled = false;
+    $('btnStart').disabled = false;
+    setStatus('캘리브레이션 읽는 중…');
+    await send('C');
+    setTimeout(startStream, 2500);
+  } catch (err) {
+    setStatus('연결 안 됨');
+    if (err && err.name !== 'NotFoundError') toast('연결 실패: ' + err.message);
+  }
+}
+
+async function startStream() {
+  if (!connected) return;
+  if (!haveCal) finishCal();
+  if (!haveCal) toast('기기에서 캘리브레이션을 받지 못했습니다. 아는 무게를 걸고 수동 보정을 해주세요.');
+  await send('S' + SAMPLE_RATE);
+  setStatus('연결됨 · ' + SAMPLE_RATE + 'Hz', true);
+  requestWakeLock();
+}
+
+async function send(cmd) {
+  if (!rxChar) return;
+  var data = new TextEncoder().encode(cmd);
+  try {
+    if (rxChar.writeValueWithoutResponse) await rxChar.writeValueWithoutResponse(data);
+    else await rxChar.writeValue(data);
+  } catch (e) {
+    try { await rxChar.writeValue(data); } catch (e2) { toast('명령 전송 실패: ' + e2.message); }
+  }
+}
+
+function onDisconnect() {
+  connected = false;
+  rxChar = txChar = null;
+  setStatus('연결 끊김');
+  $('btnConnect').textContent = '기기 연결';
+  $('btnTare').disabled = true;
+  $('btnStart').disabled = true;
+  stopSession();
+}
+
+function disconnect() {
+  if (dev && dev.gatt.connected) dev.gatt.disconnect();
+  else onDisconnect();
+}
+
+/* ---- incoming data -------------------------------------------------- */
+
+function onNotify(ev) {
+  lineBuf += new TextDecoder().decode(ev.target.value);
+  var i;
+  while ((i = lineBuf.indexOf('\n')) >= 0) {
+    var line = lineBuf.slice(0, i).replace(/\r/g, '').trim();
+    lineBuf = lineBuf.slice(i + 1);
+    if (line) handleLine(line);
+  }
+  if (lineBuf.length > 4096) lineBuf = '';
+}
+
+function handleLine(line) {
+  if (/^[0-9A-Fa-f]{32}$/.test(line)) { onSample(line); return; }
+  var m = line.match(/^(\d+),(\d+),(-?[\d.]+),(-?\d+)$/);
+  if (m) {
+    var s = +m[1];
+    if (s >= 0 && s < 4) {
+      cal[s].push({ mass: parseFloat(m[3]), adc: parseInt(m[4], 10) });
+      calLines++;
+      if (calLines >= 16) finishCal();
+    }
+    return;
+  }
+  if (/^Error/i.test(line)) toast('기기 오류: ' + line);
+}
+
+function finishCal() {
+  var ok = true;
+  for (var s = 0; s < NSENSORS; s++) {
+    cal[s].sort(function (a, b) { return a.adc - b.adc; });
+    if (cal[s].length < 2) ok = false;
+  }
+  haveCal = ok;
+  if (ok) toast('');
+}
+
+function onSample(hex) {
+  var b = new Uint8Array(16);
+  for (var i = 0; i < 16; i++) b[i] = parseInt(hex.substr(i * 2, 2), 16);
+  live.battery = b[2] | (b[3] << 8);
+  var adc = [];
+  for (var s = 0; s < 4; s++) {
+    var o = 4 + s * 3;
+    var v = b[o] | (b[o + 1] << 8) | (b[o + 2] << 16);
+    if (v & 0x800000) v -= 0x1000000;
+    adc.push(v);
+  }
+  lastAdc = adc;
+  var m = [0, 0, 0];
+  for (var k = 0; k < NSENSORS; k++) m[k] = POLARITY[k] * toMass(k, adc[k] - tareRaw[k]);
+  live.sensors = m;
+  live.total = m[0] + m[1] + m[2];
+  live.left  = m[0] + m[1] / 2;
+  live.right = m[2] + m[1] / 2;
+  live.t = performance.now();
+  if (measuring) measuring.push(live.total);
+}
+
+function toMass(sensor, delta) {
+  if (haveCal) {
+    var pts = cal[sensor];
+    if (pts.length < 2) return 0;
+    return interp(pts, pts[0].adc + delta) - pts[0].mass;
+  }
+  if (manualScale !== null) return delta * manualScale;
+  return 0;
+}
+
+function interp(pts, adc) {
+  var i;
+  if (adc <= pts[0].adc) i = 0;
+  else if (adc >= pts[pts.length - 1].adc) i = pts.length - 2;
+  else { for (i = 0; i < pts.length - 2; i++) if (adc <= pts[i + 1].adc) break; }
+  var p0 = pts[i], p1 = pts[i + 1];
+  if (p1.adc === p0.adc) return p0.mass;
+  return p0.mass + (adc - p0.adc) * (p1.mass - p0.mass) / (p1.adc - p0.adc);
+}
+
+function tare() { tareRaw = lastAdc.slice(); toast(''); }
+
+function manualCalibrate() {
+  var known = prompt('지금 걸려 있는 무게를 kg으로 입력하세요');
+  if (known === null) return;
+  var kg = parseFloat(known);
+  if (!(kg > 0)) return;
+  var rawSum = 0;
+  for (var i = 0; i < NSENSORS; i++) rawSum += POLARITY[i] * (lastAdc[i] - tareRaw[i]);
+  if (Math.abs(rawSum) < 1) { toast('신호가 너무 작습니다. 무게를 걸고 다시 시도하세요.'); return; }
+  manualScale = kg / rawSum;
+  haveCal = false;
+  toast('수동 보정 완료 (단일 지점 선형 근사)');
+}
+
+/* ---- audio ---------------------------------------------------------- */
+
+var actx = null, osc = null, gain = null, currentState = 'idle';
+
+function initAudio() {
+  if (actx) { if (actx.state === 'suspended') actx.resume(); return; }
+  var AC = window.AudioContext || window.webkitAudioContext;
+  actx = new AC();
+  gain = actx.createGain(); gain.gain.value = 0; gain.connect(actx.destination);
+  osc = actx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 320; osc.connect(gain); osc.start();
+}
+function volume() { return (+$('vol').value) / 100 * 0.4; }
+function tone(state) {
+  if (!actx || state === currentState) return;
+  currentState = state;
+  var t = actx.currentTime;
+  if (state === 'under') { osc.type = 'sine'; osc.frequency.setTargetAtTime(320, t, 0.01); gain.gain.setTargetAtTime(volume(), t, 0.02); }
+  else if (state === 'over') { osc.type = 'sawtooth'; osc.frequency.setTargetAtTime(900, t, 0.01); gain.gain.setTargetAtTime(volume() * 0.7, t, 0.02); }
+  else gain.gain.setTargetAtTime(0, t, 0.03);
+}
+function blip(freq, dur) {
+  if (!actx) return;
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = 'square'; o.frequency.value = freq; g.gain.value = volume();
+  o.connect(g); g.connect(actx.destination);
+  var t = actx.currentTime;
+  o.start(t); g.gain.setTargetAtTime(0, t + dur * 0.6, 0.03); o.stop(t + dur + 0.1);
+}
+
+/* ---- bodyweight log ------------------------------------------------- */
+
+var weights = load('mb.weights', []);
+
+function latestWeight() { return weights.length ? weights[weights.length - 1] : null; }
+function weightOn(date) { for (var i = 0; i < weights.length; i++) if (weights[i].date === date) return weights[i]; return null; }
+
+function addWeight(date, kg) {
+  weights = weights.filter(function (w) { return w.date !== date; });
+  weights.push({ date: date, kg: Math.round(kg * 10) / 10 });
+  weights.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  store('mb.weights', weights);
+  renderWeight(); renderCalendar();
+}
+function removeWeight(date) {
+  weights = weights.filter(function (w) { return w.date !== date; });
+  store('mb.weights', weights);
+  renderWeight(); renderCalendar();
+}
+function fmtDate(s) { var p = s.split('-'); return (+p[1]) + '월 ' + (+p[2]) + '일'; }
+
+function renderWeight() {
+  var last = latestWeight();
+  $('wLatest').innerHTML = (last ? last.kg.toFixed(1) : '—') + '<small>kg</small>';
+  $('wLastDate').textContent = last ? '최근 기록 ' + fmtDate(last.date) : '기록 없음';
+  var html = '';
+  var list = weights.slice().reverse().slice(0, 30);
+  for (var i = 0; i < list.length; i++) {
+    var w = list[i];
+    var idx = weights.indexOf(w);
+    var prev = idx > 0 ? weights[idx - 1] : null;
+    var diff = prev ? (w.kg - prev.kg) : null;
+    html += '<div class="item"><span class="d">' + esc(w.date) + '</span>'
+      + '<span class="diff">' + (diff === null ? '' : (diff > 0 ? '+' : '') + diff.toFixed(1)) + '</span>'
+      + '<span class="k">' + w.kg.toFixed(1) + ' kg</span>'
+      + '<button class="xs danger" data-del="' + esc(w.date) + '">삭제</button></div>';
+  }
+  $('wEntries').innerHTML = html || '<div class="empty">아직 기록이 없습니다. 오늘 체중을 입력해 보세요.</div>';
+  drawWeightChart();
+}
+
+function drawWeightChart() {
+  var cv = $('wchart');
+  var r = cv.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return;
+  var d = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  var g = cv.getContext('2d');
+  g.setTransform(d, 0, 0, d, 0, 0);
+  var w = r.width, h = r.height;
+  g.clearRect(0, 0, w, h);
+
+  var big = w > 560;
+  var fs = big ? 13 : 11;
+  var DAYS = 30;
+  var end = new Date(); end.setHours(0, 0, 0, 0);
+  var start = new Date(end); start.setDate(end.getDate() - (DAYS - 1));
+  var startStr = dateStr(start);
+  var pts = weights.filter(function (x) { return x.date >= startStr; });
+
+  var padL = big ? 46 : 38, padR = big ? 56 : 44, padT = big ? 26 : 20, padB = big ? 32 : 26;
+  var pw = w - padL - padR, ph = h - padT - padB;
+
+  if (!pts.length) {
+    g.fillStyle = '#6E828C'; g.font = fs + 'px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('최근 30일 기록 없음', w / 2, h / 2);
+    $('wRange').textContent = '';
+    return;
+  }
+
+  var min = Infinity, max = -Infinity;
+  pts.forEach(function (p) { min = Math.min(min, p.kg); max = Math.max(max, p.kg); });
+  var lo = Math.floor(min - 1), hi = Math.ceil(max + 1);
+  if (hi - lo < 4) { var mid = (lo + hi) / 2; lo = Math.floor(mid - 2); hi = Math.ceil(mid + 2); }
+  var stepY = (hi - lo) > 12 ? 4 : (hi - lo) > 6 ? 2 : 1;
+
+  function dayIndex(s) { var p = s.split('-'); var dt = new Date(+p[0], +p[1] - 1, +p[2]); return Math.round((dt - start) / 86400000); }
+  var X = function (i) { return padL + i / (DAYS - 1) * pw; };
+  var Y = function (kg) { return padT + (1 - (kg - lo) / (hi - lo)) * ph; };
+
+  g.strokeStyle = '#24313A'; g.lineWidth = 1; g.fillStyle = '#6E828C';
+  g.font = fs + 'px sans-serif'; g.textAlign = 'right'; g.textBaseline = 'middle';
+  for (var v = lo; v <= hi; v += stepY) {
+    g.beginPath(); g.moveTo(padL, Y(v)); g.lineTo(w - padR, Y(v)); g.stroke();
+    g.fillText(v, padL - 6, Y(v));
+  }
+  g.textAlign = 'center'; g.textBaseline = 'top';
+  for (var i = DAYS - 1; i >= 0; i -= 7) {
+    var dt = new Date(start); dt.setDate(start.getDate() + i);
+    g.beginPath(); g.moveTo(X(i), padT); g.lineTo(X(i), padT + ph); g.stroke();
+    g.fillText((dt.getMonth() + 1) + '/' + dt.getDate(), X(i), padT + ph + 6);
+  }
+
+  g.strokeStyle = '#4FA7FF'; g.lineWidth = big ? 2.5 : 2; g.lineJoin = 'round';
+  g.beginPath();
+  pts.forEach(function (p, k) { var x = X(dayIndex(p.date)), y = Y(p.kg); if (k === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+  g.stroke();
+  pts.forEach(function (p) {
+    var x = X(dayIndex(p.date)), y = Y(p.kg);
+    g.beginPath(); g.arc(x, y, big ? 4.5 : 3.5, 0, Math.PI * 2);
+    g.fillStyle = '#0B1013'; g.fill(); g.strokeStyle = '#4FA7FF'; g.lineWidth = 2; g.stroke();
+  });
+
+  var lp = pts[pts.length - 1];
+  var lx = X(dayIndex(lp.date)), ly = Y(lp.kg);
+  g.fillStyle = '#4FA7FF'; g.font = 'bold ' + (fs + 1) + 'px sans-serif';
+  g.textAlign = 'left'; g.textBaseline = 'bottom';
+  g.fillText(lp.kg.toFixed(1) + 'kg', Math.min(lx + 8, w - padR + 4), ly - 6);
+
+  var first = pts[0];
+  $('wRange').textContent = '최근 30일 · 최저 ' + min.toFixed(1) + ' / 최고 ' + max.toFixed(1)
+    + ' · ' + fmtDate(first.date) + ' 대비 ' + ((lp.kg - first.kg) >= 0 ? '+' : '') + (lp.kg - first.kg).toFixed(1) + ' kg';
+}
+
+var measuring = null;
+function measureBodyweight() {
+  if (!readingAvailable()) { toast('기기를 연결하고 보정이 끝난 뒤에 측정하세요.'); return; }
+  initAudio();
+  var btn = $('btnWMeasure');
+  btn.disabled = true;
+  var n = 3;
+  var tick = function () {
+    if (n > 0) { btn.textContent = n + '초 후 측정 시작… 팔을 펴고 매달리세요'; blip(760, .08); n--; setTimeout(tick, 1000); return; }
+    btn.textContent = '측정 중… 가만히 매달려 있으세요';
+    blip(1200, .12);
+    measuring = [];
+    setTimeout(function () {
+      var samples = measuring; measuring = null;
+      btn.disabled = false; btn.textContent = '보드에 매달려서 측정';
+      if (!samples || samples.length < 5) { toast('데이터가 부족합니다. 다시 시도하세요.'); return; }
+      var sum = 0; samples.forEach(function (v) { sum += v; });
+      var avg = sum / samples.length;
+      if (avg < 20) { toast('측정값이 너무 작습니다 (' + avg.toFixed(1) + ' kg). 매달린 상태에서 측정하세요.'); return; }
+      blip(520, .35);
+      $('wKg').value = avg.toFixed(1);
+      $('wDate').value = todayStr();
+      $('wMeasureNote').textContent = '측정 결과 ' + avg.toFixed(1) + ' kg. 저장을 누르면 기록됩니다.';
+    }, 2000);
+  };
+  tick();
+}
+
+/* ---- Beastmaker 1000 holds ------------------------------------------ *
+ * Depths are measured values (Gordon Lesti). Rects are [x, y, w, h] in the
+ * 1000×350 drawing. Symmetric holds list left then right.
+ * ------------------------------------------------------------------- */
+var HOLDS = [
+  { id: 'jug',  name: '저그',                     short: '저그', kind: 'jug',    rects: [[28, 36, 200, 70], [772, 36, 200, 70]] },
+  { id: 'sl35', name: '슬로퍼 35°',               short: '35°',  kind: 'sloper', rects: [[234, 36, 152, 70], [614, 36, 152, 70]] },
+  { id: 'sl20', name: '슬로퍼 20°',               short: '20°',  kind: 'sloper', rects: [[392, 36, 216, 70]] },
+  { id: 'e15',  name: '15mm 에지 (4손가락)',       short: '15',   rects: [[72, 122, 164, 42], [764, 122, 164, 42]] },
+  { id: 'p30',  name: '30mm 포켓 (4손가락)',       short: '30',   rects: [[384, 122, 112, 42], [504, 122, 112, 42]] },
+  { id: 'e45',  name: '45mm 에지 (4손가락)',       short: '45',   rects: [[38, 188, 162, 46], [800, 188, 162, 46]] },
+  { id: 'p50',  name: '50mm 포켓 (2손가락)',       short: '50',   rects: [[214, 188, 86, 46], [700, 188, 86, 46]] },
+  { id: 'p45',  name: '45mm 포켓 (3손가락)',       short: '45',   rects: [[314, 188, 116, 46], [570, 188, 116, 46]] },
+  { id: 'e53',  name: '53mm 에지 (4손가락, 중앙)', short: '53',   rects: [[440, 188, 120, 46]] },
+  { id: 'e20',  name: '20mm 에지 (4손가락)',       short: '20',   rects: [[138, 270, 152, 48], [710, 270, 152, 48]] },
+  { id: 'p25',  name: '25mm 포켓 (2손가락)',       short: '25',   rects: [[304, 270, 86, 48], [610, 270, 86, 48]] },
+  { id: 'p20',  name: '20mm 포켓 (3손가락)',       short: '20',   rects: [[404, 270, 86, 48], [510, 270, 86, 48]] }
+];
+function holdById(id) { for (var i = 0; i < HOLDS.length; i++) if (HOLDS[i].id === id) return HOLDS[i]; return null; }
+function holdNameId(id, fallback) { var h = holdById(id); return h ? h.name : (fallback || '홀드 미지정'); }
+
+var GRIPS = [
+  { id: 'four',    name: '네 손가락',       en: 'four' },
+  { id: 'front3',  name: '앞 세 손가락',    en: 'front three' },
+  { id: 'back3',   name: '뒤 세 손가락',    en: 'back three' },
+  { id: 'front2',  name: '앞 두 손가락',    en: 'front two' },
+  { id: 'middle2', name: '가운데 두 손가락', en: 'middle two' },
+  { id: 'back2',   name: '뒤 두 손가락',    en: 'back two' },
+  { id: 'index',   name: '검지',           en: 'index' },
+  { id: 'middle',  name: '중지',           en: 'middle' },
+  { id: 'ring',    name: '약지',           en: 'ring' },
+  { id: 'pinky',   name: '소지',           en: 'pinky' }
+];
+function gripById(id) { for (var i = 0; i < GRIPS.length; i++) if (GRIPS[i].id === id) return GRIPS[i]; return null; }
+function gripName(id) { var g = gripById(id); return g ? g.name + ' (' + g.en + ')' : ''; }
+
+var CRIMPS = ['-', '하프 크림프', '오픈 핸드', '풀 크림프', '드래그'];
+
+function handLabel(h) {
+  var out = holdNameId(h.holdId, h.hold);
+  var g = gripName(h.grip); if (g) out += ' · ' + g;
+  if (h.crimp && h.crimp !== '-') out += ' · ' + h.crimp;
+  return out;
+}
+function setLabel(s) {
+  if (s.same) return handLabel(s.hands.L);
+  return '왼손 ' + handLabel(s.hands.L) + ' / 오른손 ' + handLabel(s.hands.R);
+}
+
+/* board drawing -------------------------------------------------------- */
+function buildBoardSvg() {
+  var svg = $('boardSvg');
+  var s = '';
+  s += '<defs>'
+    + '<linearGradient id="gTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C39A6A"/><stop offset="1" stop-color="#A67B4C"/></linearGradient>'
+    + '<linearGradient id="gFront" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8E6742"/><stop offset="1" stop-color="#5F4128"/></linearGradient>'
+    + '<linearGradient id="gCav" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2E1B0C"/><stop offset="0.55" stop-color="#4A2F17"/><stop offset="1" stop-color="#6B4826"/></linearGradient>'
+    + '<linearGradient id="gCavF" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#24140A"/><stop offset="0.55" stop-color="#3D2612"/><stop offset="1" stop-color="#5A3B1F"/></linearGradient>'
+    + '<linearGradient id="gSlope" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E2BE90"/><stop offset="1" stop-color="#C79C6C"/></linearGradient>'
+    + '<linearGradient id="gJug" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B58A5B"/><stop offset="1" stop-color="#93693F"/></linearGradient>'
+    + '<linearGradient id="gLedge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(0,0,0,.45)"/><stop offset="1" stop-color="rgba(0,0,0,0)"/></linearGradient>'
+    + '<filter id="fShadow" x="-10%" y="-20%" width="120%" height="150%"><feGaussianBlur stdDeviation="3"/></filter>'
+    + '<filter id="fSoft" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation="1.2"/></filter>'
+    + '<pattern id="grain" width="1000" height="350" patternUnits="userSpaceOnUse">'
+    +   '<g fill="none" stroke="rgba(60,35,10,.10)" stroke-width="1.4">'
+    +     '<path d="M0 60 C200 40 380 80 600 58 S900 40 1000 62"/><path d="M0 150 C180 130 400 170 620 150 S880 128 1000 154"/>'
+    +     '<path d="M0 100 C240 120 420 90 650 108 S900 132 1000 104"/><path d="M0 210 C220 190 420 236 640 214 S860 190 1000 218"/>'
+    +     '<path d="M0 300 C200 280 400 320 620 300 S880 276 1000 304"/><path d="M0 250 C180 270 380 240 600 258 S860 282 1000 254"/>'
+    +   '</g></pattern>'
+    + '</defs>';
+  // drop shadow under the whole board
+  s += '<rect x="16" y="46" width="968" height="292" rx="146" fill="rgba(0,0,0,.45)" filter="url(#fShadow)"/>';
+  // front face
+  s += '<rect x="10" y="30" width="980" height="304" rx="150" fill="url(#gFront)"/>';
+  s += '<rect x="10" y="30" width="980" height="304" rx="150" fill="url(#grain)"/>';
+  // top face (lighter), rounded lower corners
+  s += '<path d="M160 30 H840 A150 150 0 0 1 990 180 V182 A70 70 0 0 1 920 252 H80 A70 70 0 0 1 10 182 V180 A150 150 0 0 1 160 30 Z" fill="url(#gTop)"/>';
+  s += '<path d="M160 30 H840 A150 150 0 0 1 990 180 V182 A70 70 0 0 1 920 252 H80 A70 70 0 0 1 10 182 V180 A150 150 0 0 1 160 30 Z" fill="url(#grain)"/>';
+  // ledge shadow where the top face drops to the front face
+  s += '<path d="M80 252 H920 A70 70 0 0 0 990 182 V196 A70 70 0 0 1 920 266 H80 A70 70 0 0 1 10 196 V182 A70 70 0 0 0 80 252 Z" fill="url(#gLedge)" opacity=".9"/>';
+  s += '<path d="M10 182 A70 70 0 0 0 80 252 H920 A70 70 0 0 0 990 182" fill="none" stroke="rgba(255,235,205,.28)" stroke-width="1.5"/>';
+  // top edge highlight
+  s += '<path d="M160 31 H840" stroke="rgba(255,240,215,.35)" stroke-width="2" fill="none"/>';
+
+  HOLDS.forEach(function (h) {
+    h.rects.forEach(function (r, idx) {
+      var x = r[0], y = r[1], w = r[2], hh = r[3];
+      var side = h.rects.length === 1 ? 'C' : (idx === 0 ? 'L' : 'R');
+      var front = y > 252;
+      if (h.kind === 'sloper' || h.kind === 'jug') {
+        var fill = h.kind === 'sloper' ? 'url(#gSlope)' : 'url(#gJug)';
+        s += '<rect x="' + (x + 2) + '" y="' + (y + 4) + '" width="' + w + '" height="' + hh + '" rx="16" fill="rgba(0,0,0,.35)" filter="url(#fSoft)"/>';
+        s += '<rect class="hold" data-hold="' + h.id + '" data-side="' + side + '" x="' + x + '" y="' + y + '" width="' + w + '" height="' + hh + '" rx="16" fill="' + fill + '" stroke="rgba(60,35,10,.35)" stroke-width="1.5"/>';
+        s += '<path d="M' + (x + 14) + ' ' + (y + 3) + ' H' + (x + w - 14) + '" stroke="rgba(255,245,225,.45)" stroke-width="2" fill="none" pointer-events="none"/>';
+        if (h.kind === 'sloper') {
+          // subtle slope shading
+          s += '<rect x="' + x + '" y="' + (y + hh * 0.55) + '" width="' + w + '" height="' + (hh * 0.45) + '" rx="12" fill="rgba(0,0,0,.10)" pointer-events="none"/>';
+        }
+      } else {
+        // pocket / edge: cavity with depth shading and a lit lower lip
+        s += '<rect x="' + (x + 1) + '" y="' + (y + 2) + '" width="' + w + '" height="' + hh + '" rx="' + Math.min(24, hh / 2) + '" fill="rgba(0,0,0,.35)" filter="url(#fSoft)"/>';
+        s += '<rect class="hold" data-hold="' + h.id + '" data-side="' + side + '" x="' + x + '" y="' + y + '" width="' + w + '" height="' + hh + '" rx="' + Math.min(24, hh / 2) + '" fill="' + (front ? 'url(#gCavF)' : 'url(#gCav)') + '" stroke="rgba(30,18,8,.7)" stroke-width="1.5"/>';
+        s += '<path d="M' + (x + 12) + ' ' + (y + hh - 5) + ' H' + (x + w - 12) + '" stroke="rgba(255,225,190,.32)" stroke-width="3" stroke-linecap="round" fill="none" pointer-events="none"/>';
+        s += '<path d="M' + (x + 10) + ' ' + (y + 4) + ' H' + (x + w - 10) + '" stroke="rgba(0,0,0,.5)" stroke-width="3" stroke-linecap="round" fill="none" pointer-events="none"/>';
+      }
+      var dark = h.kind === 'sloper' || h.kind === 'jug';
+      s += '<text x="' + (x + w / 2) + '" y="' + (y + hh / 2 + 1) + '" text-anchor="middle" dominant-baseline="middle" font-size="' + (dark ? 19 : 16) + '" font-weight="700" fill="' + (dark ? 'rgba(45,28,10,.7)' : 'rgba(255,235,210,.55)') + '" pointer-events="none">' + esc(h.short) + '</text>';
+    });
+  });
+  svg.innerHTML = s;
+}
+
+function markBoardSelection(id, hand) {
+  var rects = $('boardSvg').querySelectorAll('.hold');
+  for (var i = 0; i < rects.length; i++) {
+    var r = rects[i];
+    var mine = r.dataset.hold === id;
+    var thisSide = r.dataset.side === 'C' || r.dataset.side === hand;
+    r.classList.toggle('sel', mine && thisSide);
+    r.classList.toggle('selo', mine && !thisSide);
+  }
+  var chips = $('holdChips').querySelectorAll('button');
+  for (var j = 0; j < chips.length; j++) chips[j].classList.toggle('sel', chips[j].dataset.hold === id);
+}
+
+var picker = null;   // {i, hand}
+function openHoldPicker(i, hand) {
+  picker = { i: i, hand: hand };
+  var s = editing.sets[i];
+  $('holdTitle').textContent = s.same ? '홀드 선택 (양손)' : '홀드 선택 (' + (hand === 'L' ? '왼손' : '오른손') + ')';
+  $('holdHint').textContent = s.same
+    ? '그림에서 홀드를 누르세요. 좌우 같은 홀드가 함께 선택됩니다. 숫자는 실측 깊이(mm)입니다.'
+    : (hand === 'L' ? '왼손' : '오른손') + '이 잡을 홀드를 누르세요. 숫자는 실측 깊이(mm)입니다.';
+  markBoardSelection(s.hands[hand].holdId || '', s.same ? 'B' : hand);
+  $('holdOverlay').hidden = false;
+}
+function closeHoldPicker() { $('holdOverlay').hidden = true; picker = null; }
+function pickHold(id) {
+  if (!picker || !editing) return;
+  var h = holdById(id); if (!h) return;
+  var s = editing.sets[picker.i];
+  s.hands[picker.hand].holdId = h.id;
+  if (s.same) s.hands.R.holdId = s.hands.L.holdId = h.id;
+  closeHoldPicker();
+  renderEditorSets();
+}
+
+/* ---- workouts ------------------------------------------------------- */
+
+var workouts = load('mb.workouts', []);
+var selectedWorkoutId = load('mb.selected', '');
+var editing = null;
+
+(function migrate() {
+  var changed = false;
+  workouts.forEach(function (w) {
+    w.sets.forEach(function (s) {
+      if (!s.hands) {
+        var holdId = s.holdId;
+        if (holdId === undefined) {
+          holdId = '';
+          HOLDS.forEach(function (h) { if (h.name === s.hold) holdId = h.id; });
+          if (!holdId && /20mm/.test(s.hold || '')) holdId = 'e20';
+        }
+        var grip = gripById(s.grip) ? s.grip : 'four';
+        var crimp = s.crimp !== undefined ? s.crimp : (CRIMPS.indexOf(s.grip) > 0 ? s.grip : '-');
+        var hand = { holdId: holdId, hold: s.hold || '', grip: grip, crimp: crimp };
+        s.hands = { L: JSON.parse(JSON.stringify(hand)), R: JSON.parse(JSON.stringify(hand)) };
+        s.same = true;
+        delete s.holdId; delete s.hold; delete s.grip; delete s.crimp;
+        changed = true;
+      }
+      if (s.same === undefined) { s.same = true; changed = true; }
+    });
+  });
+  if (changed) store('mb.workouts', workouts);
+})();
+
+function defaultSet(prev) {
+  if (prev) return JSON.parse(JSON.stringify(prev));
+  var hand = { holdId: 'e20', grip: 'four', crimp: '-' };
+  return { hands: { L: JSON.parse(JSON.stringify(hand)), R: JSON.parse(JSON.stringify(hand)) }, same: true,
+           work: 7, rest: 3, reps: 6, target: 40, unit: 'kg', setrest: 120 };
+}
+
+function saveWorkouts() { store('mb.workouts', workouts); }
+function findWorkout(id) { for (var i = 0; i < workouts.length; i++) if (workouts[i].id === id) return workouts[i]; return null; }
+function setDuration(s) { return s.reps * s.work + Math.max(0, s.reps - 1) * s.rest; }
+function workoutDuration(w) { var t = 0; w.sets.forEach(function (s, i) { t += setDuration(s) + (i < w.sets.length - 1 ? s.setrest : 0); }); return t; }
+function fmtDur(sec) { var m = Math.floor(sec / 60), s = Math.round(sec % 60); return m ? m + '분 ' + (s ? s + '초' : '') : s + '초'; }
+function targetLabel(s) { return s.unit === 'pct' ? s.target + '% 체중' : s.target + ' kg'; }
+function setSummary(s) { return setLabel(s) + ' · ' + s.work + 's/' + s.rest + 's × ' + s.reps + ' · ' + targetLabel(s); }
+
+function renderWorkoutList() {
+  var html = '';
+  workouts.forEach(function (w) {
+    var sel = w.id === selectedWorkoutId;
+    html += '<div class="card' + (sel ? ' selected' : '') + '">'
+      + '<div class="name">' + esc(w.name) + (sel ? ' <span style="color:var(--band);font-size:12px">· 선택됨</span>' : '') + '</div>'
+      + '<div class="meta">' + w.sets.length + '세트 · 약 ' + fmtDur(workoutDuration(w)) + '<br>'
+      + w.sets.map(function (s, i) { return (i + 1) + '. ' + esc(setSummary(s)); }).join('<br>') + '</div>'
+      + '<div class="actions">'
+      + '<button class="sm primary" data-act="use" data-id="' + w.id + '">' + (sel ? '훈련으로' : '선택') + '</button>'
+      + '<button class="sm" data-act="edit" data-id="' + w.id + '">편집</button>'
+      + '<button class="sm" data-act="dup" data-id="' + w.id + '">복제</button>'
+      + '<button class="sm danger" data-act="del" data-id="' + w.id + '">삭제</button>'
+      + '</div></div>';
+  });
+  $('wlist').innerHTML = html || '<div class="empty">저장된 워크아웃이 없습니다.<br>“+ 새 워크아웃”으로 세트를 구성해 보세요.</div>';
+  renderWorkoutSelect();
+}
+
+function renderWorkoutSelect() {
+  var sel = $('wsel');
+  var html = '<option value="">빠른 훈련 (설정값 사용)</option>';
+  workouts.forEach(function (w) { html += '<option value="' + w.id + '"' + (w.id === selectedWorkoutId ? ' selected' : '') + '>' + esc(w.name) + '</option>'; });
+  sel.innerHTML = html;
+  if (!findWorkout(selectedWorkoutId)) { selectedWorkoutId = ''; sel.value = ''; }
+}
+
+function openEditor(w) {
+  editing = w ? JSON.parse(JSON.stringify(w)) : { id: uid(), name: '', sets: [defaultSet()] };
+  $('wedTitle').textContent = w ? '워크아웃 편집' : '새 워크아웃';
+  $('wedName').value = editing.name;
+  renderEditorSets();
+  $('wlistPage').hidden = true;
+  $('weditor').hidden = false;
+  $('tab-workouts').scrollTop = 0;
+}
+function closeEditor() { editing = null; $('weditor').hidden = true; $('wlistPage').hidden = false; }
+
+function editorInput(i, k, label, value, extra) {
+  return '<div><label>' + label + '</label><input type="number" inputmode="decimal" data-i="' + i + '" data-k="' + k + '" value="' + esc(value) + '"' + (extra || '') + '></div>';
+}
+
+function handEditor(i, hand, h, title) {
+  var gripOpts = GRIPS.map(function (g) { return '<option value="' + g.id + '"' + (g.id === h.grip ? ' selected' : '') + '>' + esc(g.name + ' · ' + g.en) + '</option>'; }).join('');
+  var crimpOpts = CRIMPS.map(function (c) { return '<option value="' + esc(c) + '"' + (c === h.crimp ? ' selected' : '') + '>' + esc(c === '-' ? '잡는 법 미지정' : c) + '</option>'; }).join('');
+  var hn = holdNameId(h.holdId, h.hold);
+  return '<div class="hand"><div class="ht">' + title + '</div>'
+    + '<button type="button" class="holdbtn" data-pick="' + i + '" data-hand="' + hand + '"><span class="hn' + (h.holdId ? '' : ' none') + '">' + esc(hn) + '</span><span class="arrow">보드 ▸</span></button>'
+    + '<select data-i="' + i + '" data-hand="' + hand + '" data-k="grip" aria-label="그립">' + gripOpts + '</select>'
+    + '<select data-i="' + i + '" data-hand="' + hand + '" data-k="crimp" aria-label="잡는 법">' + crimpOpts + '</select>'
+    + '</div>';
+}
+
+function renderEditorSets() {
+  var html = '';
+  editing.sets.forEach(function (s, i) {
+    html += '<div class="setcard">'
+      + '<div class="sethead"><span class="n">세트 ' + (i + 1) + '</span>'
+      + '<label class="same"><input type="checkbox" data-same="' + i + '"' + (s.same ? ' checked' : '') + '> 양손 동일</label>'
+      + '<button class="xs" data-set="up" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>'
+      + '<button class="xs" data-set="down" data-i="' + i + '"' + (i === editing.sets.length - 1 ? ' disabled' : '') + '>↓</button>'
+      + '<button class="xs" data-set="dup" data-i="' + i + '">복제</button>'
+      + '<button class="xs danger" data-set="del" data-i="' + i + '"' + (editing.sets.length === 1 ? ' disabled' : '') + '>삭제</button>'
+      + '</div>';
+    if (s.same) {
+      html += '<div class="hands one">' + handEditor(i, 'L', s.hands.L, '<b>양손</b> · 홀드 / 그립 / 잡는 법') + '</div>';
+    } else {
+      html += '<div class="hands">' + handEditor(i, 'L', s.hands.L, '<b>왼손</b>') + handEditor(i, 'R', s.hands.R, '<b>오른손</b>') + '</div>';
+    }
+    html += '<div class="grid">'
+      + '<div class="targetcell"><label>목표</label><div class="unitrow">'
+      + '<input type="number" inputmode="decimal" step="0.5" min="0" data-i="' + i + '" data-k="target" value="' + esc(s.target) + '">'
+      + '<select data-i="' + i + '" data-k="unit"><option value="kg"' + (s.unit === 'kg' ? ' selected' : '') + '>kg</option><option value="pct"' + (s.unit === 'pct' ? ' selected' : '') + '>%체중</option></select>'
+      + '</div></div>'
+      + editorInput(i, 'work', '매달림 (초)', s.work, ' step="1" min="1"')
+      + editorInput(i, 'rest', '휴식 (초)', s.rest, ' step="1" min="0"')
+      + editorInput(i, 'reps', '반복 (회)', s.reps, ' step="1" min="1"')
+      + editorInput(i, 'setrest', '세트 휴식 (초)', s.setrest, ' step="5" min="0"')
+      + '</div></div>';
+  });
+  $('wedSets').innerHTML = html;
+}
+
+function saveEditor() {
+  editing.name = $('wedName').value.trim();
+  if (!editing.name) { toast('워크아웃 이름을 입력하세요.'); $('wedName').focus(); return; }
+  var bad = false, noHold = false;
+  editing.sets.forEach(function (s) {
+    if (s.same) s.hands.R = JSON.parse(JSON.stringify(s.hands.L));
+    ['L', 'R'].forEach(function (k) {
+      var h = s.hands[k];
+      if (!h.holdId && !h.hold) noHold = true;
+      if (!gripById(h.grip)) h.grip = 'four';
+      if (CRIMPS.indexOf(h.crimp) < 0) h.crimp = '-';
+    });
+    s.work = Math.max(1, num(s.work, 7));
+    s.rest = Math.max(0, num(s.rest, 3));
+    s.reps = Math.max(1, Math.round(num(s.reps, 6)));
+    s.target = Math.max(0, num(s.target, 0));
+    s.setrest = Math.max(0, num(s.setrest, 120));
+    if (s.unit !== 'pct') s.unit = 'kg';
+    if (!(s.target > 0)) bad = true;
+  });
+  if (noHold) { toast('홀드를 선택하지 않은 세트가 있습니다.'); return; }
+  if (bad) { toast('목표는 0보다 커야 합니다.'); return; }
+  var idx = workouts.findIndex(function (w) { return w.id === editing.id; });
+  if (idx >= 0) workouts[idx] = editing; else workouts.push(editing);
+  saveWorkouts();
+  toast('');
+  closeEditor();
+  renderWorkoutList();
+}
+
+/* ---- session plan ---------------------------------------------------- */
+
+var plan = [];
+
+function quickPlan() {
+  var n = Math.max(1, Math.round(+$('sets').value || 1));
+  var s = {
+    label: '빠른 훈련', desc: '',
+    hang: Math.max(1, +$('hang').value || 7),
+    rest: Math.max(0, +$('rest').value || 3),
+    reps: Math.max(1, Math.round(+$('reps').value || 6)),
+    target: Math.max(0, +$('target').value || 0),
+    setrest: Math.max(0, +$('setrest').value || 120),
+    unit: 'kg', rawTarget: +$('target').value || 0
+  };
+  var out = [];
+  for (var i = 0; i < n; i++) out.push(s);
+  return out;
+}
+function resolveTarget(s) {
+  if (s.unit === 'pct') { var bw = latestWeight(); return bw ? bw.kg * s.target / 100 : NaN; }
+  return s.target;
+}
+function workoutPlan(w) {
+  return w.sets.map(function (s) {
+    return { label: w.name, desc: setLabel(s), hang: s.work, rest: s.rest, reps: s.reps,
+             target: resolveTarget(s), setrest: s.setrest, unit: s.unit, rawTarget: s.target };
+  });
+}
+function buildPlan() { var w = findWorkout(selectedWorkoutId); return w ? workoutPlan(w) : quickPlan(); }
+function curSet() {
+  if (!plan.length) plan = buildPlan();
+  var i = Math.min(Math.max(S.set - 1, 0), plan.length - 1);
+  return plan[i];
+}
+
+/* ---- training log ------------------------------------------------------ */
+
+var logs = load('mb.logs', []);
+var rec = null, acc = null;
+
+function beginRecord() {
+  rec = {
+    id: uid(), date: todayStr(), start: Date.now(), dur: 0, workout: plan[0].label, completed: false,
+    sets: plan.map(function (p) {
+      return { desc: p.desc, target: isFinite(p.target) ? Math.round(p.target * 10) / 10 : null,
+               reps: p.reps, hang: p.hang, rest: p.rest, repsDone: 0, time: 0, load: 0, max: 0 };
+    })
+  };
+  acc = null;
+}
+function accumulate(f, dt) {
+  if (!rec) return;
+  if (!acc) acc = { time: 0, load: 0, max: 0 };
+  acc.time += dt; acc.load += f * dt; if (f > acc.max) acc.max = f;
+}
+function finalizeRep(setIdx) {
+  if (!rec || !acc) return;
+  var s = rec.sets[setIdx];
+  if (s && acc.time >= 0.5) { s.repsDone++; s.time += acc.time; s.load += acc.load; if (acc.max > s.max) s.max = acc.max; }
+  acc = null;
+}
+function endRecord(completed) {
+  if (!rec) return;
+  if (S.phase === 'hang') finalizeRep(S.set - 1);
+  var any = rec.sets.some(function (s) { return s.repsDone > 0; });
+  if (any) {
+    rec.dur = Math.round((Date.now() - rec.start) / 1000);
+    rec.completed = completed;
+    rec.sets.forEach(function (s) {
+      s.avg = s.time > 0 ? Math.round(s.load / s.time * 10) / 10 : 0;
+      s.time = Math.round(s.time * 10) / 10; s.load = Math.round(s.load); s.max = Math.round(s.max * 10) / 10;
+    });
+    logs.push(rec);
+    store('mb.logs', logs);
+    calSelected = rec.date;
+    renderCalendar();
+  }
+  rec = null; acc = null;
+}
+function logsOn(date) { return logs.filter(function (l) { return l.date === date; }); }
+
+/* ---- session state machine ------------------------------------------ */
+
+var S = { phase: 'idle', until: 0, rep: 0, set: 1, lastBeep: -1, start: 0 };
+var pageStart = performance.now();
+
+function tol() { return Math.max(0.1, +$('tol').value || 3); }
+
+function startSession() {
+  initAudio();
+  plan = buildPlan();
+  if (!plan.length) { toast('실행할 세트가 없습니다.'); return; }
+  for (var i = 0; i < plan.length; i++) {
+    if (!isFinite(plan[i].target)) { toast('체중 기록이 없어 %체중 목표를 계산할 수 없습니다. 체중 탭에서 먼저 기록하세요.'); return; }
+  }
+  toast('');
+  S.phase = 'ready'; S.rep = 0; S.set = 1; S.lastBeep = -1;
+  S.start = performance.now(); S.until = S.start + 3000;
+  beginRecord();
+  $('btnStart').textContent = '중지'; $('btnStart').className = 'stop';
+  $('wsel').disabled = true;
+}
+
+function stopSession() {
+  endRecord(S.phase === 'done');
+  S.phase = 'idle';
+  tone('idle');
+  $('btnStart').textContent = '시작'; $('btnStart').className = '';
+  $('wsel').disabled = false;
+}
+
+function advance(now) {
+  var cur = plan[S.set - 1];
+  if (S.phase === 'ready') {
+    S.phase = 'hang'; S.rep = 1; S.until = now + cur.hang * 1000;
+    blip(1200, .12); setTimeout(function () { blip(1200, .12); }, 140);
+  } else if (S.phase === 'hang') {
+    blip(520, .35);
+    finalizeRep(S.set - 1);
+    if (S.rep >= cur.reps) {
+      if (S.set >= plan.length) { S.phase = 'done'; stopSession(); S.phase = 'done'; return; }
+      S.phase = 'setrest'; S.until = now + cur.setrest * 1000;
+      S.set++; S.rep = 0;
+    } else {
+      S.phase = 'rest'; S.until = now + cur.rest * 1000;
+    }
+  } else if (S.phase === 'rest' || S.phase === 'setrest') {
+    cur = plan[S.set - 1];
+    S.rep++;
+    S.phase = 'hang'; S.until = now + cur.hang * 1000;
+    blip(1200, .12); setTimeout(function () { blip(1200, .12); }, 140);
+  }
+  S.lastBeep = -1;
+}
+
+/* ---- hero arcs (viewBox follows the box's aspect so the trace fills it) -- */
+
+var ARC = { R: 118, cy: 108, maxA: 40, span: 80, W: 400, H: 225, cxL: 176, cxR: 224 };
+
+function arcPt(side, aDeg) {
+  var a = aDeg * Math.PI / 180;
+  var x = side === 'L' ? ARC.cxL - ARC.R * Math.cos(a) : ARC.cxR + ARC.R * Math.cos(a);
+  return [x, ARC.cy - ARC.R * Math.sin(a)];
+}
+function arcPath(side, a1, a2) {
+  var p1 = arcPt(side, a1), p2 = arcPt(side, a2);
+  var sweep = side === 'L' ? 1 : 0;
+  return 'M' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1) + ' A' + ARC.R + ' ' + ARC.R + ' 0 0 ' + sweep + ' ' + p2[0].toFixed(1) + ' ' + p2[1].toFixed(1);
+}
+function fracToAngle(v) { return clamp((v - 1) * ARC.span, -ARC.maxA, ARC.maxA); }
+
+function buildHeroSvg() {
+  var svg = $('heroSvg');
+  svg.setAttribute('viewBox', '0 0 ' + ARC.W.toFixed(1) + ' ' + ARC.H);
+  var s = '';
+  ['L', 'R'].forEach(function (side) {
+    s += '<path d="' + arcPath(side, -ARC.maxA, ARC.maxA) + '" fill="none" stroke="rgba(42,56,65,.92)" stroke-width="16"/>';
+    for (var a = -ARC.maxA; a <= ARC.maxA; a += 5) {
+      var big = a % 20 === 0;
+      var r0 = ARC.R - 12, r1 = ARC.R - (big ? 22 : 17);
+      var rad = a * Math.PI / 180;
+      var cx = side === 'L' ? ARC.cxL : ARC.cxR, sg = side === 'L' ? -1 : 1;
+      var x0 = cx + sg * r0 * Math.cos(rad), x1 = cx + sg * r1 * Math.cos(rad);
+      var y0 = ARC.cy - r0 * Math.sin(rad), y1 = ARC.cy - r1 * Math.sin(rad);
+      s += '<line x1="' + x0.toFixed(1) + '" y1="' + y0.toFixed(1) + '" x2="' + x1.toFixed(1) + '" y2="' + y1.toFixed(1) + '" stroke="#8FA1AA" stroke-width="' + (big ? 1.4 : 0.8) + '" opacity="' + (big ? 0.9 : 0.5) + '"/>';
+    }
+    s += '<path id="seg' + side + '" d="' + arcPath(side, -6, 6) + '" fill="none" stroke="#E8EDEF" stroke-width="16" opacity="0.92"/>';
+    var m0 = arcPt(side, 0);
+    var bx = side === 'L' ? m0[0] + 14 : m0[0] - 14;
+    s += '<text id="hand' + side + '" x="' + bx.toFixed(1) + '" y="' + (ARC.cy + ARC.R * Math.sin(ARC.maxA * Math.PI / 180) + 18).toFixed(1) + '" text-anchor="middle" font-size="11" font-weight="600" fill="#8FA1AA"></text>';
+  });
+  svg.innerHTML = s;
+}
+
+function layoutHero() {
+  var r = $('hero').getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  var W = Math.max(300, ARC.H * r.width / r.height);
+  if (Math.abs(W - ARC.W) < 0.5) return;
+  ARC.W = W; ARC.cxL = 58 + ARC.R; ARC.cxR = W - 58 - ARC.R;
+  buildHeroSvg();
+}
+
+function updateArcs(tgt, T, judging) {
+  var half = tgt / 2;
+  [['L', live.left], ['R', live.right]].forEach(function (h) {
+    var side = h[0], v = h[1];
+    var frac = half > 0 ? v / half : 0;
+    var a = clamp(fracToAngle(frac), -ARC.maxA + 6, ARC.maxA - 6);
+    var seg = $('seg' + side);
+    seg.setAttribute('d', arcPath(side, a - 6, a + 6));
+    var color = '#E8EDEF';
+    if (judging && half > 0) color = v < half - T ? '#FF6B6B' : v > half + T ? '#F2B441' : '#33D48F';
+    seg.setAttribute('stroke', color);
+    $('hand' + side).textContent = readingAvailable() ? v.toFixed(1) : '';
+  });
+}
+
+/* ---- render loop ----------------------------------------------------- */
+
+var hist = [];
+var TRACE_WINDOW = 15;
+var canvas = $('trace'), ctx = canvas.getContext('2d');
+var lastFrameT = performance.now();
+
+function sizeCanvas() {
+  var r = canvas.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  if (r.width === 0) return;
+  canvas.width = Math.round(r.width * d); canvas.height = Math.round(r.height * d);
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+}
+function fmtRemain(sec) {
+  if (sec >= 60) { var m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + pad2(s); }
+  return sec.toFixed(1);
+}
+
+function frame() {
+  var now = performance.now();
+  var dt = Math.min(0.1, (now - lastFrameT) / 1000);
+  lastFrameT = now;
+  var idle = S.phase === 'idle' || S.phase === 'done';
+  if (idle) plan = buildPlan();
+  var c = curSet();
+  var T = tol();
+  var f = live.total;
+
+  if (!idle && now >= S.until) advance(now);
+  idle = S.phase === 'idle' || S.phase === 'done';
+  var remain = Math.max(0, (S.until - now) / 1000);
+
+  if (S.phase === 'ready' || S.phase === 'rest' || S.phase === 'setrest') {
+    var sec = Math.ceil(remain);
+    if (sec <= 3 && sec >= 1 && sec !== S.lastBeep) { S.lastBeep = sec; blip(760, .08); }
+  }
+
+  var state = 'idle';
+  var tgt = isFinite(c.target) ? c.target : 0;
+  if (S.phase === 'hang') {
+    if (f < tgt - T) state = 'under'; else if (f > tgt + T) state = 'over'; else state = 'in';
+    accumulate(f, dt);
+  }
+  tone(state === 'in' ? 'idle' : state);
+  document.documentElement.style.setProperty('--wash',
+    state === 'under' ? 'rgba(255,107,107,.07)' : state === 'over' ? 'rgba(242,180,65,.08)' : state === 'in' ? 'rgba(51,212,143,.06)' : 'transparent');
+
+  var avail = readingAvailable();
+
+  $('srSet').textContent = idle ? '–' : S.set;  $('srSets').textContent = plan.length;
+  $('srRep').textContent = idle ? '–' : S.rep;  $('srReps').textContent = c.reps;
+
+  var names = { idle: '대기', ready: '준비', hang: '매달림', rest: '휴식', setrest: '세트 휴식', done: '완료' };
+  $('phaseLbl').textContent = names[S.phase];
+  var timer = $('timer');
+  timer.textContent = S.phase === 'idle' ? '—' : S.phase === 'done' ? '완료' : fmtRemain(remain);
+  timer.className = 'timer' + (idle ? ' dim' : '');
+
+  $('force').textContent = avail ? f.toFixed(1) : '—';
+  $('loadpill').className = 'loadpill' + (state !== 'idle' ? ' ' + state : '');
+  var sub = '';
+  if (avail && tgt > 0) sub = '목표의 ' + Math.round(f / tgt * 100) + '%';
+  if (state === 'under') sub += ' · 더 당기세요'; else if (state === 'over') sub += ' · 힘을 빼세요'; else if (state === 'in') sub += ' · 유지';
+  $('loadSub').textContent = sub;
+
+  updateArcs(tgt, T, f > 2);
+
+  var gl = c.desc ? esc(c.desc) : esc(c.label);
+  var tl = isFinite(c.target) ? '목표 ' + c.target.toFixed(1) + ' kg' : '목표 계산 불가 (체중 기록 필요)';
+  if (c.unit === 'pct') tl += ' (' + c.rawTarget + '% 체중)';
+  tl += ' · ' + c.hang + 's 매달림 / ' + c.rest + 's 휴식 × ' + c.reps + '회';
+  if (plan.length > 1 && !idle) gl = '세트 ' + S.set + '/' + plan.length + ' · ' + gl;
+  $('gripLine').innerHTML = gl + '<small>' + tl + '</small>';
+
+  if (live.battery !== null) $('battery').textContent = '배터리 ' + live.battery + '%';
+  $('btnWMeasure').disabled = !avail || measuring !== null;
+
+  if (connected) {
+    var sm = live.sensors;
+    $('diag').textContent = '센서별 kg (왼쪽 / 가운데 / 오른쪽): ' + sm[0].toFixed(1) + ' / ' + sm[1].toFixed(1) + ' / ' + sm[2].toFixed(1)
+      + ' · ADC: ' + lastAdc[0] + ' / ' + lastAdc[1] + ' / ' + lastAdc[2]
+      + (haveCal ? ' · 기기 보정 사용' : manualScale !== null ? ' · 수동 보정 사용' : ' · 보정 없음');
+  }
+
+  var st = tgt > 0 ? (f < tgt - T ? 'under' : f > tgt + T ? 'over' : 'in') : 'in';
+  hist.push({ t: now, f: f, st: st });
+  while (hist.length && hist[0].t < now - (TRACE_WINDOW + 1) * 1000) hist.shift();
+  drawTrace(now, tgt, T);
+
+  requestAnimationFrame(frame);
+}
+
+var TRACE_COL = { in: '#33D48F', under: '#FF6B6B', over: '#F2B441' };
+
+function drawTrace(now, tgt, T) {
+  var r = canvas.getBoundingClientRect(), w = r.width, h = r.height;
+  if (!w || !h) return;
+  var d = window.devicePixelRatio || 1;
+  if (canvas.width !== Math.round(w * d) || canvas.height !== Math.round(h * d)) sizeCanvas();
+  ctx.clearRect(0, 0, w, h);
+
+  var big = w > 600;
+  var fs = big ? 12 : 10;
+  var max = Math.max(tgt * 1.5, 10);
+  var top = 10, bottom = h - (big ? 26 : 22);
+  var y = function (v) { return bottom - clamp(v / max, 0, 1) * (bottom - top); };
+  var x = function (t) { return w - (now - t) / 1000 / TRACE_WINDOW * w; };
+
+  if (tgt > 0) {
+    ctx.fillStyle = 'rgba(51,212,143,.16)';
+    ctx.fillRect(0, y(tgt + T), w, y(tgt - T) - y(tgt + T));
+    ctx.setLineDash([5, 5]); ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(242,180,65,.9)';
+    ctx.beginPath(); ctx.moveTo(0, y(tgt + T)); ctx.lineTo(w, y(tgt + T)); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,107,107,.9)';
+    ctx.beginPath(); ctx.moveTo(0, y(tgt - T)); ctx.lineTo(w, y(tgt - T)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = fs + 'px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = 'rgba(242,180,65,.95)'; ctx.fillText((tgt + T).toFixed(0), w - 4, y(tgt + T) - 2);
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(255,107,107,.95)'; ctx.fillText((tgt - T).toFixed(0), w - 4, y(tgt - T) + 2);
+  }
+
+  ctx.fillStyle = 'rgba(143,161,170,.8)'; ctx.font = fs + 'px sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  var stepK = max > 60 ? 20 : max > 30 ? 10 : 5;
+  for (var k = stepK; k < max - 2; k += stepK) {
+    if (tgt > 0 && (Math.abs(k - (tgt + T)) < stepK * 0.35 || Math.abs(k - (tgt - T)) < stepK * 0.35)) continue;
+    ctx.fillText(k, w - 4, y(k));
+  }
+
+  var base = S.phase === 'idle' || S.phase === 'done' ? pageStart : S.start;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = 'rgba(143,161,170,.7)';
+  var elapsedNow = (now - base) / 1000;
+  for (var s = Math.ceil(elapsedNow - TRACE_WINDOW); s <= elapsedNow; s++) {
+    if (s % 5 !== 0 || s < 0) continue;
+    var xt = x(base + s * 1000);
+    ctx.fillText(s + 's', xt, h - 4);
+    ctx.fillRect(xt, bottom, 1, 4);
+  }
+
+  if (hist.length < 2) return;
+
+  var grad = ctx.createLinearGradient(0, top, 0, bottom);
+  grad.addColorStop(0, 'rgba(92,214,168,.28)');
+  grad.addColorStop(1, 'rgba(92,214,168,.03)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(x(hist[0].t), bottom);
+  for (var i = 0; i < hist.length; i++) ctx.lineTo(x(hist[i].t), y(hist[i].f));
+  ctx.lineTo(x(hist[hist.length - 1].t), bottom);
+  ctx.closePath(); ctx.fill();
+
+  ctx.lineWidth = big ? 2.8 : 2.2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  var cur = null;
+  for (var j = 1; j < hist.length; j++) {
+    var col = TRACE_COL[hist[j].st];
+    if (col !== cur) {
+      if (cur) ctx.stroke();
+      cur = col; ctx.strokeStyle = col; ctx.beginPath(); ctx.moveTo(x(hist[j - 1].t), y(hist[j - 1].f));
+    }
+    ctx.lineTo(x(hist[j].t), y(hist[j].f));
+  }
+  if (cur) ctx.stroke();
+
+  var last = hist[hist.length - 1];
+  ctx.beginPath(); ctx.arc(x(last.t), y(last.f), 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#E8EDEF'; ctx.fill();
+  ctx.strokeStyle = TRACE_COL[last.st]; ctx.lineWidth = 2; ctx.stroke();
+}
+
+/* ---- calendar / log view ------------------------------------------------ */
+
+var calMonth = (function () { var d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
+var calSelected = todayStr();
+
+function renderCalendar() {
+  var y = calMonth.y, m = calMonth.m;
+  $('calMon').textContent = y + '년 ' + (m + 1) + '월';
+  var first = new Date(y, m, 1);
+  var offset = (first.getDay() + 6) % 7;
+  var start = new Date(y, m, 1 - offset);
+  var today = todayStr();
+  var html = ['월', '화', '수', '목', '금', '토', '일'].map(function (d) { return '<div class="wd">' + d + '</div>'; }).join('');
+  var logDays = {}; logs.forEach(function (l) { logDays[l.date] = (logDays[l.date] || 0) + 1; });
+  var wDays = {}; weights.forEach(function (w) { wDays[w.date] = true; });
+  for (var i = 0; i < 42; i++) {
+    var d = new Date(start); d.setDate(start.getDate() + i);
+    var ds = dateStr(d);
+    var cls = 'day' + (d.getMonth() !== m ? ' other' : '') + (logDays[ds] ? ' done' : '') + (ds === today ? ' today' : '') + (ds === calSelected ? ' sel' : '');
+    var dots = '';
+    if (logDays[ds] > 1) dots += '<i></i>';
+    if (wDays[ds]) dots += '<i class="w"></i>';
+    html += '<div class="' + cls + '" data-date="' + ds + '"><span class="n">' + (logDays[ds] ? '✓' : d.getDate()) + '</span><div class="dots">' + dots + '</div></div>';
+  }
+  $('calGrid').innerHTML = html;
+  renderDayPanel();
+}
+
+function fmtTime(ts) { var d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+
+function renderDayPanel() {
+  var ds = calSelected;
+  var p = ds.split('-');
+  var dt = new Date(+p[0], +p[1] - 1, +p[2]);
+  var wd = ['일', '월', '화', '수', '목', '금', '토'][dt.getDay()];
+  var html = '<div class="dh">' + (+p[1]) + '월 ' + (+p[2]) + '일 (' + wd + ')</div>';
+  var w = weightOn(ds);
+  if (w) html += '<div class="card"><div class="name">체중 ' + w.kg.toFixed(1) + ' kg</div></div>';
+  var list = logsOn(ds);
+  if (!list.length && !w) html += '<div class="empty">이 날의 기록이 없습니다.</div>';
+  list.forEach(function (l) {
+    var totalLoad = 0, reps = 0, maxAll = 0;
+    l.sets.forEach(function (s) { totalLoad += s.load; reps += s.repsDone; if (s.max > maxAll) maxAll = s.max; });
+    html += '<div class="card sess">'
+      + '<div class="name">' + esc(l.workout) + (l.completed ? '' : ' <span style="color:var(--over);font-size:12px">· 중단</span>') + '</div>'
+      + '<div class="meta">' + fmtTime(l.start) + ' 시작 · ' + fmtDur(l.dur) + '</div>'
+      + '<div class="stats"><div>반복<b>' + reps + '</b></div><div>최대<b>' + maxAll.toFixed(1) + ' kg</b></div><div>총 부하<b>' + Math.round(totalLoad).toLocaleString() + ' kg·s</b></div></div>'
+      + '<div class="meta" style="margin-top:8px">'
+      + l.sets.map(function (s, i) {
+          var line = (i + 1) + '. ' + (s.desc ? esc(s.desc) : (s.hold ? esc(s.hold) + (s.grip ? ' · ' + esc(s.grip) : '') : '빠른 훈련'));
+          line += ' · ' + s.repsDone + '/' + s.reps + '회';
+          if (s.repsDone) line += ' · 평균 ' + s.avg.toFixed(1) + ' / 최대 ' + s.max.toFixed(1) + ' kg';
+          if (s.target !== null && s.target !== undefined) line += ' (목표 ' + s.target + ')';
+          return line;
+        }).join('<br>')
+      + '</div>'
+      + '<div class="actions"><button class="xs danger" data-dellog="' + l.id + '">삭제</button></div>'
+      + '</div>';
+  });
+  $('dayPanel').innerHTML = html;
+}
+
+/* ---- data export / import ---------------------------------------------- */
+
+function allData() {
+  return { app: 'motherboard-trainer', version: 2, exported: new Date().toISOString(),
+           workouts: workouts, weights: weights, logs: logs, settings: load('mb.settings', {}), selected: selectedWorkoutId };
+}
+function openExport() {
+  $('dataTitle').textContent = '데이터 내보내기';
+  $('dataHint').textContent = '아래 내용을 전부 복사해서 다른 기기의 “데이터 가져오기”에 붙여 넣으세요.';
+  $('dataText').value = JSON.stringify(allData());
+  $('btnDataApply').hidden = true; $('btnDataCopy').hidden = false;
+  $('dataOverlay').hidden = false;
+}
+function openImport() {
+  $('dataTitle').textContent = '데이터 가져오기';
+  $('dataHint').textContent = '다른 기기에서 내보낸 내용을 붙여 넣고 적용을 누르세요. 이 기기의 워크아웃·기록·체중을 전부 대체합니다.';
+  $('dataText').value = '';
+  $('btnDataApply').hidden = false; $('btnDataCopy').hidden = true;
+  $('dataOverlay').hidden = false;
+}
+function applyImport() {
+  var obj;
+  try { obj = JSON.parse($('dataText').value); } catch (e) { toast('붙여 넣은 내용을 읽을 수 없습니다.'); return; }
+  if (!obj || obj.app !== 'motherboard-trainer') { toast('이 앱에서 내보낸 데이터가 아닙니다.'); return; }
+  if (!confirm('이 기기의 데이터를 가져온 내용으로 대체할까요?')) return;
+  workouts = Array.isArray(obj.workouts) ? obj.workouts : [];
+  weights = Array.isArray(obj.weights) ? obj.weights : [];
+  logs = Array.isArray(obj.logs) ? obj.logs : [];
+  selectedWorkoutId = obj.selected || '';
+  store('mb.workouts', workouts); store('mb.weights', weights); store('mb.logs', logs); store('mb.selected', selectedWorkoutId);
+  if (obj.settings) { store('mb.settings', obj.settings); SETTING_IDS.forEach(function (id) { if (obj.settings[id] !== undefined) $(id).value = obj.settings[id]; }); }
+  location.reload();
+}
+
+/* ---- wake lock ------------------------------------------------------- */
+
+var wakeLock = null;
+async function requestWakeLock() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { /* not critical */ }
+}
+document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && connected) requestWakeLock(); });
+
+/* ---- settings persistence ------------------------------------------- */
+
+var SETTING_IDS = ['target', 'tol', 'hang', 'rest', 'reps', 'sets', 'setrest', 'vol'];
+(function () {
+  var saved = load('mb.settings', {});
+  SETTING_IDS.forEach(function (id) {
+    if (saved[id] !== undefined) $(id).value = saved[id];
+    $(id).addEventListener('change', function () {
+      var o = {}; SETTING_IDS.forEach(function (k) { o[k] = $(k).value; }); store('mb.settings', o);
+    });
+  });
+})();
+
+/* ---- tabs / layout ---------------------------------------------------- */
+
+function showTab(name) {
+  document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === name); });
+  document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.id === 'tab-' + name); });
+  if (name === 'train') { sizeCanvas(); layoutHero(); }
+  if (name === 'weight') drawWeightChart();
+  if (name === 'log') renderCalendar();
+}
+document.querySelector('.tabs').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (b) showTab(b.dataset.tab);
+});
+window.addEventListener('resize', function () { sizeCanvas(); layoutHero(); drawWeightChart(); });
+if (window.ResizeObserver) {
+  new ResizeObserver(function () { sizeCanvas(); layoutHero(); }).observe($('hero'));
+  new ResizeObserver(function () { drawWeightChart(); }).observe($('wchart'));
+}
+
+/* ---- wiring ---------------------------------------------------------- */
+
+$('btnConnect').addEventListener('click', function () { initAudio(); if (connected) disconnect(); else connect(); });
+$('btnTare').addEventListener('click', tare);
+$('btnStart').addEventListener('click', function () { if (S.phase === 'idle' || S.phase === 'done') startSession(); else stopSession(); });
+$('btnManual').addEventListener('click', manualCalibrate);
+$('btnExport').addEventListener('click', openExport);
+$('btnImport').addEventListener('click', openImport);
+$('btnDataClose').addEventListener('click', function () { $('dataOverlay').hidden = true; });
+$('btnDataApply').addEventListener('click', applyImport);
+$('btnDataCopy').addEventListener('click', function () {
+  var ta = $('dataText'); ta.focus(); ta.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ta.value).then(function () { toast('복사했습니다.'); }, function () { toast('길게 눌러 전체 선택 후 복사하세요.'); });
+  } else { try { document.execCommand('copy'); toast('복사했습니다.'); } catch (e) { toast('길게 눌러 전체 선택 후 복사하세요.'); } }
+});
+
+$('wsel').addEventListener('change', function () { selectedWorkoutId = this.value; store('mb.selected', selectedWorkoutId); renderWorkoutList(); });
+
+$('btnNewWorkout').addEventListener('click', function () { openEditor(null); });
+$('wlist').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-act]'); if (!b) return;
+  var w = findWorkout(b.dataset.id); if (!w) return;
+  var act = b.dataset.act;
+  if (act === 'use') { selectedWorkoutId = w.id; store('mb.selected', w.id); renderWorkoutList(); showTab('train'); }
+  else if (act === 'edit') openEditor(w);
+  else if (act === 'dup') { var copy = JSON.parse(JSON.stringify(w)); copy.id = uid(); copy.name = w.name + ' (복사)'; workouts.push(copy); saveWorkouts(); renderWorkoutList(); }
+  else if (act === 'del') {
+    if (!confirm('“' + w.name + '” 워크아웃을 삭제할까요?')) return;
+    workouts = workouts.filter(function (x) { return x.id !== w.id; });
+    if (selectedWorkoutId === w.id) { selectedWorkoutId = ''; store('mb.selected', ''); }
+    saveWorkouts(); renderWorkoutList();
+  }
+});
+
+$('btnWedCancel').addEventListener('click', closeEditor);
+$('btnWedSave').addEventListener('click', saveEditor);
+$('btnAddSet').addEventListener('click', function () { editing.sets.push(defaultSet(editing.sets[editing.sets.length - 1])); renderEditorSets(); });
+$('wedSets').addEventListener('input', function (e) {
+  var el = e.target; if (!el.dataset || el.dataset.k === undefined) return;
+  var s = editing.sets[+el.dataset.i]; if (!s) return;
+  if (el.dataset.hand) {
+    s.hands[el.dataset.hand][el.dataset.k] = el.value;
+    if (s.same) s.hands.R[el.dataset.k] = s.hands.L[el.dataset.k];
+  } else {
+    s[el.dataset.k] = el.value;
+  }
+});
+$('wedSets').addEventListener('change', function (e) {
+  var cb = e.target.closest('input[data-same]'); if (!cb) return;
+  var s = editing.sets[+cb.dataset.same]; if (!s) return;
+  s.same = cb.checked;
+  if (s.same) s.hands.R = JSON.parse(JSON.stringify(s.hands.L));
+  renderEditorSets();
+});
+$('wedSets').addEventListener('click', function (e) {
+  var pick = e.target.closest('button[data-pick]');
+  if (pick) { openHoldPicker(+pick.dataset.pick, pick.dataset.hand); return; }
+  var b = e.target.closest('button[data-set]'); if (!b) return;
+  var i = +b.dataset.i, act = b.dataset.set, arr = editing.sets;
+  if (act === 'del' && arr.length > 1) arr.splice(i, 1);
+  else if (act === 'dup') arr.splice(i + 1, 0, defaultSet(arr[i]));
+  else if (act === 'up' && i > 0) { var t = arr[i - 1]; arr[i - 1] = arr[i]; arr[i] = t; }
+  else if (act === 'down' && i < arr.length - 1) { var u = arr[i + 1]; arr[i + 1] = arr[i]; arr[i] = u; }
+  renderEditorSets();
+});
+
+buildBoardSvg();
+$('holdChips').innerHTML = HOLDS.map(function (h) { return '<button type="button" data-hold="' + h.id + '">' + esc(h.name) + '</button>'; }).join('');
+$('boardSvg').addEventListener('click', function (e) { var r = e.target.closest('.hold'); if (r) pickHold(r.dataset.hold); });
+$('holdChips').addEventListener('click', function (e) { var b = e.target.closest('button[data-hold]'); if (b) pickHold(b.dataset.hold); });
+$('btnHoldClose').addEventListener('click', closeHoldPicker);
+$('holdOverlay').addEventListener('click', function (e) { if (e.target === this) closeHoldPicker(); });
+$('dataOverlay').addEventListener('click', function (e) { if (e.target === this) this.hidden = true; });
+
+$('calPrev').addEventListener('click', function () { calMonth.m--; if (calMonth.m < 0) { calMonth.m = 11; calMonth.y--; } renderCalendar(); });
+$('calNext').addEventListener('click', function () { calMonth.m++; if (calMonth.m > 11) { calMonth.m = 0; calMonth.y++; } renderCalendar(); });
+$('calToday').addEventListener('click', function () { var d = new Date(); calMonth = { y: d.getFullYear(), m: d.getMonth() }; calSelected = todayStr(); renderCalendar(); });
+$('calGrid').addEventListener('click', function (e) {
+  var d = e.target.closest('.day'); if (!d) return;
+  calSelected = d.dataset.date;
+  var p = calSelected.split('-'); calMonth = { y: +p[0], m: +p[1] - 1 };
+  renderCalendar();
+});
+$('dayPanel').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-dellog]'); if (!b) return;
+  if (!confirm('이 훈련 기록을 삭제할까요?')) return;
+  logs = logs.filter(function (l) { return l.id !== b.dataset.dellog; });
+  store('mb.logs', logs);
+  renderCalendar();
+});
+
+$('wDate').value = todayStr();
+$('btnWSave').addEventListener('click', function () {
+  var kg = parseFloat($('wKg').value), date = $('wDate').value;
+  if (!(kg > 0) || !date) { toast('체중과 날짜를 입력하세요.'); return; }
+  addWeight(date, kg); toast(''); $('wKg').value = '';
+  $('wMeasureNote').textContent = date + ' 체중 ' + kg.toFixed(1) + ' kg 저장됨.';
+});
+$('btnWMeasure').addEventListener('click', measureBodyweight);
+$('wEntries').addEventListener('click', function (e) {
+  var b = e.target.closest('button[data-del]'); if (!b) return;
+  if (confirm(b.dataset.del + ' 기록을 삭제할까요?')) removeWeight(b.dataset.del);
+});
+
+buildHeroSvg();
+layoutHero();
+renderWorkoutList();
+renderWeight();
+renderCalendar();
+sizeCanvas();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
