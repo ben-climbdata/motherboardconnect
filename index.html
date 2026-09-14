@@ -131,7 +131,7 @@
   summary::-webkit-details-marker { display: none; }
   .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; padding: 0 16px 16px; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-  input[type=number], input[type=text], input[type=date], select, textarea {
+  input[type=number], input[type=text], input[type=date], input[type=time], select, textarea {
     width: 100%; padding: 10px; font: inherit; font-variant-numeric: tabular-nums;
     color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
   }
@@ -429,8 +429,11 @@
 
     <div class="row">
       <div><label for="wDate">날짜</label><input type="date" id="wDate"></div>
+      <div><label for="wTime">시각</label><input type="time" id="wTime"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
       <div><label for="wKg">체중 (kg)</label><input type="number" id="wKg" step="0.1" min="20" max="250" placeholder="76.2"></div>
-      <button class="sm primary" id="btnWSave" style="padding:11px 14px">저장</button>
+      <button class="sm primary" id="btnWSave" style="padding:11px 18px">저장</button>
     </div>
     <div class="row" style="margin-top:8px">
       <button class="sm" id="btnWMeasure" disabled style="flex:1">보드에 매달려서 측정</button>
@@ -725,23 +728,52 @@ function blip(freq, dur) {
   var t = actx.currentTime;
   o.start(t); g.gain.setTargetAtTime(0, t + dur * 0.6, 0.03); o.stop(t + dur + 0.1);
 }
+// rising three-note chime: a set has ended and the next one is coming
+function chime() {
+  blip(660, .12);
+  setTimeout(function () { blip(880, .12); }, 150);
+  setTimeout(function () { blip(1100, .2); }, 300);
+}
 
 /* ---- bodyweight log ------------------------------------------------- */
 
-var weights = load('mb.weights', []);
+var weights = load('mb.weights', []);   // [{id, date, ts, kg}] sorted by ts; several per day allowed
 
-function latestWeight() { return weights.length ? weights[weights.length - 1] : null; }
-function weightOn(date) { for (var i = 0; i < weights.length; i++) if (weights[i].date === date) return weights[i]; return null; }
+// older entries had one value per day and no time: place them at noon
+(function migrateWeights() {
+  var changed = false;
+  weights.forEach(function (w) {
+    if (!w.ts) { var p = w.date.split('-'); w.ts = new Date(+p[0], +p[1] - 1, +p[2], 12, 0, 0).getTime(); changed = true; }
+    if (!w.id) { w.id = uid(); changed = true; }
+  });
+  weights.sort(function (a, b) { return a.ts - b.ts; });
+  if (changed) store('mb.weights', weights);
+})();
 
-function addWeight(date, kg) {
-  weights = weights.filter(function (w) { return w.date !== date; });
-  weights.push({ date: date, kg: Math.round(kg * 10) / 10 });
-  weights.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+function weightsOn(date) { return weights.filter(function (w) { return w.date === date; }); }
+// daily series: one value per day = the lowest reading that day (several weigh-ins allowed)
+function dailyWeights() {
+  var byDay = {}, out = [];
+  weights.forEach(function (w) {
+    var d = byDay[w.date];
+    if (!d) byDay[w.date] = { date: w.date, kg: w.kg, max: w.kg, n: 1 };
+    else { if (w.kg < d.kg) d.kg = w.kg; if (w.kg > d.max) d.max = w.kg; d.n++; }
+  });
+  Object.keys(byDay).sort().forEach(function (d) { out.push(byDay[d]); });
+  return out;
+}
+// reference bodyweight (for %체중 targets and the header): the most recent day's minimum
+function latestWeight() { var d = dailyWeights(); return d.length ? d[d.length - 1] : null; }
+
+function addWeight(ts, kg) {
+  var d = new Date(ts);
+  weights.push({ id: uid(), date: dateStr(d), ts: ts, kg: Math.round(kg * 10) / 10 });
+  weights.sort(function (a, b) { return a.ts - b.ts; });
   store('mb.weights', weights);
   renderWeight(); renderCalendar();
 }
-function removeWeight(date) {
-  weights = weights.filter(function (w) { return w.date !== date; });
+function removeWeight(id) {
+  weights = weights.filter(function (w) { return w.id !== id; });
   store('mb.weights', weights);
   renderWeight(); renderCalendar();
 }
@@ -749,18 +781,18 @@ function removeWeight(date) {
 function renderWeight() {
   var last = latestWeight();
   $('wLatest').innerHTML = (last ? last.kg.toFixed(1) : '—') + '<small>kg</small>';
-  $('wLastDate').textContent = last ? '최근 기록 ' + fmtDate(last.date) : '기록 없음';
+  $('wLastDate').textContent = last ? fmtDate(last.date) + ' 최저 (' + last.n + '회 측정)' : '기록 없음';
   var html = '';
-  var list = weights.slice().reverse().slice(0, 30);
+  var list = weights.slice().reverse().slice(0, 40);
   for (var i = 0; i < list.length; i++) {
     var w = list[i];
     var idx = weights.indexOf(w);
     var prev = idx > 0 ? weights[idx - 1] : null;
     var diff = prev ? (w.kg - prev.kg) : null;
-    html += '<div class="item"><span class="d">' + esc(w.date) + '</span>'
+    html += '<div class="item"><span class="d">' + esc(w.date) + ' <span style="opacity:.7">' + fmtTime(w.ts) + '</span></span>'
       + '<span class="diff">' + (diff === null ? '' : (diff > 0 ? '+' : '') + diff.toFixed(1)) + '</span>'
       + '<span class="k">' + w.kg.toFixed(1) + ' kg</span>'
-      + '<button class="xs danger" data-del="' + esc(w.date) + '">삭제</button></div>';
+      + '<button class="xs danger" data-del="' + esc(w.id) + '">삭제</button></div>';
   }
   $('wEntries').innerHTML = html || '<div class="empty">아직 기록이 없습니다. 오늘 체중을 입력해 보세요.</div>';
   drawWeightChart();
@@ -783,7 +815,7 @@ function drawWeightChart() {
   var end = new Date(); end.setHours(0, 0, 0, 0);
   var start = new Date(end); start.setDate(end.getDate() - (DAYS - 1));
   var startStr = dateStr(start);
-  var pts = weights.filter(function (x) { return x.date >= startStr; });
+  var pts = dailyWeights().filter(function (x) { return x.date >= startStr; });
 
   var padL = big ? 46 : 38, padR = big ? 56 : 44, padT = big ? 26 : 20, padB = big ? 32 : 26;
   var pw = w - padL - padR, ph = h - padT - padB;
@@ -795,14 +827,15 @@ function drawWeightChart() {
     return;
   }
 
-  var min = Infinity, max = -Infinity;
-  pts.forEach(function (p) { min = Math.min(min, p.kg); max = Math.max(max, p.kg); });
-  var lo = Math.floor(min - 1), hi = Math.ceil(max + 1);
+  var min = Infinity, max = -Infinity, maxHi = -Infinity;
+  pts.forEach(function (p) { min = Math.min(min, p.kg); max = Math.max(max, p.kg); maxHi = Math.max(maxHi, p.max); });
+  var lo = Math.floor(min - 1), hi = Math.ceil(maxHi + 1);
   if (hi - lo < 4) { var mid = (lo + hi) / 2; lo = Math.floor(mid - 2); hi = Math.ceil(mid + 2); }
   var stepY = (hi - lo) > 12 ? 4 : (hi - lo) > 6 ? 2 : 1;
 
-  function dayIndex(s) { var p = s.split('-'); var dt = new Date(+p[0], +p[1] - 1, +p[2]); return Math.round((dt - start) / 86400000); }
-  var X = function (i) { return padL + i / (DAYS - 1) * pw; };
+  // one point per day (that day's lowest reading)
+  function dayIndex(p) { var q = p.date.split('-'); var dt = new Date(+q[0], +q[1] - 1, +q[2]); return Math.round((dt - start) / 86400000); }
+  var X = function (i) { return padL + clamp(i, 0, DAYS - 1) / (DAYS - 1) * pw; };
   var Y = function (kg) { return padT + (1 - (kg - lo) / (hi - lo)) * ph; };
 
   g.strokeStyle = '#24313A'; g.lineWidth = 1; g.fillStyle = '#6E828C';
@@ -818,25 +851,59 @@ function drawWeightChart() {
     g.fillText((dt.getMonth() + 1) + '/' + dt.getDate(), X(i), padT + ph + 6);
   }
 
+  // daily range band between the day's min and max
+  var anyRange = pts.some(function (p) { return p.max > p.kg; });
+  if (anyRange && pts.length > 1) {
+    g.fillStyle = 'rgba(242,180,65,.10)';
+    g.beginPath();
+    pts.forEach(function (p, k) { var x = X(dayIndex(p)), y = Y(p.max); if (k === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+    for (var q = pts.length - 1; q >= 0; q--) g.lineTo(X(dayIndex(pts[q])), Y(pts[q].kg));
+    g.closePath(); g.fill();
+  }
+
+  // daily max: orange dashed line
+  g.strokeStyle = '#F2B441'; g.lineWidth = big ? 2 : 1.6; g.lineJoin = 'round';
+  g.setLineDash([5, 4]);
+  g.beginPath();
+  pts.forEach(function (p, k) { var x = X(dayIndex(p)), y = Y(p.max); if (k === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+  g.stroke();
+  g.setLineDash([]);
+  pts.forEach(function (p) {
+    var x = X(dayIndex(p)), y = Y(p.max);
+    g.beginPath(); g.arc(x, y, big ? 3.5 : 2.8, 0, Math.PI * 2);
+    g.fillStyle = '#0B1013'; g.fill(); g.strokeStyle = '#F2B441'; g.lineWidth = 1.6; g.stroke();
+  });
+
+  // daily min: blue solid line (the reference series)
   g.strokeStyle = '#4FA7FF'; g.lineWidth = big ? 2.5 : 2; g.lineJoin = 'round';
   g.beginPath();
-  pts.forEach(function (p, k) { var x = X(dayIndex(p.date)), y = Y(p.kg); if (k === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+  pts.forEach(function (p, k) { var x = X(dayIndex(p)), y = Y(p.kg); if (k === 0) g.moveTo(x, y); else g.lineTo(x, y); });
   g.stroke();
   pts.forEach(function (p) {
-    var x = X(dayIndex(p.date)), y = Y(p.kg);
+    var x = X(dayIndex(p)), y = Y(p.kg);
     g.beginPath(); g.arc(x, y, big ? 4.5 : 3.5, 0, Math.PI * 2);
     g.fillStyle = '#0B1013'; g.fill(); g.strokeStyle = '#4FA7FF'; g.lineWidth = 2; g.stroke();
   });
 
   var lp = pts[pts.length - 1];
-  var lx = X(dayIndex(lp.date)), ly = Y(lp.kg);
-  g.fillStyle = '#4FA7FF'; g.font = 'bold ' + (fs + 1) + 'px sans-serif';
-  g.textAlign = 'left'; g.textBaseline = 'bottom';
-  g.fillText(lp.kg.toFixed(1) + 'kg', Math.min(lx + 8, w - padR + 4), ly - 6);
+  var lx = X(dayIndex(lp)), ly = Y(lp.kg);
+  g.font = 'bold ' + (fs + 1) + 'px sans-serif'; g.textAlign = 'left';
+  var labelX = Math.min(lx + 8, w - padR + 4);
+  g.fillStyle = '#4FA7FF'; g.textBaseline = 'top';
+  g.fillText(lp.kg.toFixed(1) + 'kg', labelX, ly + 4);
+  if (lp.max > lp.kg) {
+    g.fillStyle = '#F2B441'; g.textBaseline = 'bottom';
+    g.fillText(lp.max.toFixed(1) + 'kg', labelX, Y(lp.max) - 4);
+  }
+
+  // legend
+  g.font = fs + 'px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'top';
+  g.fillStyle = '#4FA7FF'; g.fillRect(padL, 4, 14, 3); g.fillStyle = '#8FA1AA'; g.fillText('최저', padL + 18, 0);
+  g.fillStyle = '#F2B441'; g.fillRect(padL + 54, 4, 6, 3); g.fillRect(padL + 63, 4, 5, 3); g.fillStyle = '#8FA1AA'; g.fillText('최고', padL + 72, 0);
 
   var first = pts[0];
-  $('wRange').textContent = '최근 30일 · 최저 ' + min.toFixed(1) + ' / 최고 ' + max.toFixed(1)
-    + ' · ' + fmtDate(first.date) + ' 대비 ' + ((lp.kg - first.kg) >= 0 ? '+' : '') + (lp.kg - first.kg).toFixed(1) + ' kg';
+  $('wRange').textContent = '최근 30일 · 파란 실선은 하루 최저, 주황 점선은 하루 최고 · 최저 ' + min.toFixed(1) + ' / 최고 ' + maxHi.toFixed(1)
+    + ' · 최저값 ' + fmtDate(first.date) + ' 대비 ' + ((lp.kg - first.kg) >= 0 ? '+' : '') + (lp.kg - first.kg).toFixed(1) + ' kg';
 }
 
 /* ---- Beastmaker 1000 holds ------------------------------------------ *
@@ -849,7 +916,7 @@ var HOLDS = [
   { id: 'sl35', name: '슬로퍼 35°',               rects: [[318, 16, 262, 90], [978, 16, 262, 90]] },
   { id: 'sl20', name: '슬로퍼 20°',               rects: [[586, 16, 388, 80]] },
   { id: 'e15',  name: '15mm 에지 (4손가락)',       rects: [[70, 97, 210, 62], [1265, 97, 210, 62]] },
-  { id: 'p30',  name: '30mm 포켓 (4손가락)',       rects: [[587, 100, 158, 56], [800, 100, 160, 56]] },
+  { id: 'p30',  name: '30mm 포켓 (3손가락)',       rects: [[587, 100, 158, 56], [800, 100, 160, 56]] },
   { id: 'e45',  name: '45mm 에지 (4손가락)',       rects: [[40, 197, 245, 58], [1272, 197, 243, 58]] },
   { id: 'p50',  name: '50mm 포켓 (2손가락)',       rects: [[316, 197, 110, 58], [1130, 197, 110, 58]] },
   { id: 'p45',  name: '45mm 포켓 (3손가락)',       rects: [[466, 197, 160, 58], [926, 197, 164, 58]] },
@@ -951,6 +1018,32 @@ function latestMaxFor(h) {
 }
 function maxesOn(date) { return maxes.filter(function (m) { return m.date === date; }); }
 
+// inline editor state for a max-hang record: {id, set (for the hold picker), kg, peak}
+var editingMax = null;
+function startEditMax(id) {
+  var x = null; maxes.forEach(function (m) { if (m.id === id) x = m; });
+  if (!x) return;
+  var hand = mkHand(x.holdId, x.grip, x.crimp);
+  editingMax = { id: x.id, set: { hands: { L: hand, R: JSON.parse(JSON.stringify(hand)) }, same: true }, kg: x.kg, peak: x.peak };
+  renderDayPanel();
+}
+function saveEditMax() {
+  if (!editingMax) return;
+  var e = editingMax, h = e.set.hands.L;
+  var kg = num(e.kg, NaN), peak = num(e.peak, NaN);
+  if (!(kg > 0)) { toast('kg 값을 확인하세요.'); return; }
+  if (!(peak >= kg)) peak = kg;
+  maxes.forEach(function (m) {
+    if (m.id !== e.id) return;
+    m.holdId = h.holdId; m.grip = gripById(h.grip) ? h.grip : 'four'; m.crimp = CRIMPS.indexOf(h.crimp) >= 0 ? h.crimp : '-';
+    m.kg = Math.round(kg * 10) / 10; m.peak = Math.round(peak * 10) / 10;
+  });
+  store('mb.maxes', maxes);
+  editingMax = null;
+  toast('맥스 행 기록을 수정했습니다.');
+  renderCalendar();
+}
+
 function renderMaxList() {
   var groups = {};
   maxes.forEach(function (m) {
@@ -964,8 +1057,8 @@ function renderMaxList() {
   var html = '';
   keys.forEach(function (k) {
     var g = groups[k], m = g.latest;
-    html += '<div class="maxrow"><div class="d">' + esc(handLabel(m))
-      + '<small>최근 ' + fmtDate(m.date) + (g.n > 1 ? ' · 최고 ' + g.best.kg.toFixed(1) + ' kg (' + fmtDate(g.best.date) + ') · ' + g.n + '회' : '') + '</small></div>'
+    html += '<div class="maxrow" data-goto="' + esc(m.date) + '" style="cursor:pointer"><div class="d">' + esc(handLabel(m))
+      + '<small>최근 ' + fmtDate(m.date) + (g.n > 1 ? ' · 최고 ' + g.best.kg.toFixed(1) + ' kg (' + fmtDate(g.best.date) + ') · ' + g.n + '회' : '') + ' · 누르면 그날 기록으로</small></div>'
       + '<span class="k">' + m.kg.toFixed(1) + ' kg</span></div>';
   });
   $('maxList').innerHTML = html || '<div class="empty">아직 맥스 행 측정이 없습니다. 훈련 화면의 목록에서 "맥스 행 측정"을 골라 재 보세요.</div>';
@@ -1342,7 +1435,7 @@ function startSession() {
 
 function stopSession() {
   endRecord(S.phase === 'done');
-  S.phase = 'idle'; S.mode = ''; S.samples = null;
+  S.phase = 'idle'; S.mode = ''; S.samples = null; S.set = 1; S.rep = 0;
   tone('idle');
   $('wsel').disabled = false;
   onModeChange();
@@ -1361,6 +1454,7 @@ function advance(now) {
       if (S.set >= plan.length) { S.phase = 'done'; stopSession(); S.phase = 'done'; return; }
       S.phase = 'setrest'; S.until = now + cur.setrest * 1000;
       S.set++; S.rep = 0;
+      setTimeout(chime, 450);
     } else {
       S.phase = 'rest'; S.until = now + cur.rest * 1000;
     }
@@ -1397,7 +1491,7 @@ function finishMeasure() {
   if (!result) {
     toast('측정값이 너무 작거나 데이터가 부족합니다. 매달린 상태에서 다시 재 주세요.');
   } else if (m === 'bw') {
-    addWeight(todayStr(), result.kg);
+    addWeight(Date.now(), result.kg);
     toast('체중 ' + result.kg.toFixed(1) + ' kg 저장됨 (10초 평균, 최대 ' + result.peak.toFixed(1) + ')');
   } else {
     var h = measureSet.hands.L;
@@ -1571,7 +1665,7 @@ function frame() {
     if (c.unit === 'pct') tl += ' (' + c.rawTarget + '% 체중)';
     if (c.unit === 'max') tl += ' (' + c.rawTarget + '% 맥스)';
     tl += ' · ' + c.hang + 's 매달림 / ' + c.rest + 's 휴식 × ' + c.reps + '회';
-    if (plan.length > 1 && !idle) gl = '세트 ' + S.set + '/' + plan.length + ' · ' + gl;
+    if (plan.length > 1 && !idle) gl = (S.phase === 'setrest' ? '다음 세트 ' : '세트 ') + S.set + '/' + plan.length + ' · ' + gl;
   }
   $('gripLine').innerHTML = gl + '<small>' + tl + '</small>';
 
@@ -1708,13 +1802,31 @@ function renderDayPanel() {
   var dt = new Date(+p[0], +p[1] - 1, +p[2]);
   var wd = ['일', '월', '화', '수', '목', '금', '토'][dt.getDay()];
   var html = '<div class="dh">' + (+p[1]) + '월 ' + (+p[2]) + '일 (' + wd + ')</div>';
-  var w = weightOn(ds);
-  if (w) html += '<div class="card"><div class="name">체중 ' + w.kg.toFixed(1) + ' kg</div></div>';
+  var ws = weightsOn(ds), w = ws.length;
+  if (w) {
+    var dayMin = Math.min.apply(null, ws.map(function (x) { return x.kg; }));
+    var dayMax = Math.max.apply(null, ws.map(function (x) { return x.kg; }));
+    html += '<div class="card"><div class="name">체중 ' + dayMin.toFixed(1) + ' kg <span style="font-size:12px;color:var(--muted)">· 그날 최저' + (dayMax > dayMin ? ' · 최고 ' + dayMax.toFixed(1) + ' kg' : '') + '</span></div>'
+      + '<div class="meta">' + ws.map(function (x) { return fmtTime(x.ts) + ' ' + x.kg.toFixed(1) + ' kg'; }).join(' · ') + '</div></div>';
+  }
   var mx = maxesOn(ds);
   mx.forEach(function (x) {
+    if (editingMax && editingMax.id === x.id) {
+      var e = editingMax;
+      html += '<div class="card sess"><div class="name">맥스 행 수정</div>'
+        + '<div class="hands one" style="margin-top:8px"><div class="hand"><div class="ht"><b>홀드 / 그립 / 잡는 법</b></div>'
+        + '<button type="button" class="holdbtn" data-maxpick="1"><span class="hn">' + esc(holdNameId(e.set.hands.L.holdId)) + '</span><span class="arrow">보드 ▸</span></button>'
+        + '<select data-maxk="grip" aria-label="그립">' + gripOptions(e.set.hands.L.grip) + '</select>'
+        + '<select data-maxk="crimp" aria-label="잡는 법">' + crimpOptions(e.set.hands.L.crimp) + '</select>'
+        + '</div></div>'
+        + '<div class="row"><div><label>kg (10초 평균)</label><input type="number" inputmode="decimal" step="0.1" min="0" data-maxk="kg" value="' + esc(e.kg) + '"></div>'
+        + '<div><label>최대 kg</label><input type="number" inputmode="decimal" step="0.1" min="0" data-maxk="peak" value="' + esc(e.peak) + '"></div></div>'
+        + '<div class="actions"><button class="sm primary" data-maxsave="1">저장</button><button class="sm" data-maxcancel="1">취소</button></div></div>';
+      return;
+    }
     html += '<div class="card sess"><div class="name">맥스 행 ' + x.kg.toFixed(1) + ' kg</div>'
       + '<div class="meta">' + esc(handLabel(x)) + ' · ' + fmtTime(x.ts) + ' · 10초 평균, 최대 ' + x.peak.toFixed(1) + ' kg</div>'
-      + '<div class="actions"><button class="xs danger" data-delmax="' + x.id + '">삭제</button></div></div>';
+      + '<div class="actions"><button class="xs" data-editmax="' + x.id + '">수정</button><button class="xs danger" data-delmax="' + x.id + '">삭제</button></div></div>';
   });
   var list = logsOn(ds);
   if (!list.length && !w && !mx.length) html += '<div class="empty">이 날의 기록이 없습니다.</div>';
@@ -1802,7 +1914,7 @@ function showTab(name) {
   document.querySelectorAll('.tab').forEach(function (t) { t.classList.toggle('on', t.id === 'tab-' + name); });
   if (name === 'train') { sizeCanvas(); layoutHero(); }
   if (name === 'weight') drawWeightChart();
-  if (name === 'log') renderCalendar();
+  if (name === 'log') { editingMax = null; renderCalendar(); }
 }
 document.querySelector('.tabs').addEventListener('click', function (e) {
   var b = e.target.closest('button'); if (b) showTab(b.dataset.tab);
@@ -1918,16 +2030,42 @@ $('dayPanel').addEventListener('click', function (e) {
   if (c) {
     if (!confirm('이 맥스 행 기록을 삭제할까요?')) return;
     maxes = maxes.filter(function (x) { return x.id !== c.dataset.delmax; });
-    store('mb.maxes', maxes); renderCalendar();
+    store('mb.maxes', maxes); renderCalendar(); return;
   }
+  var ed = e.target.closest('button[data-editmax]');
+  if (ed) { startEditMax(ed.dataset.editmax); return; }
+  if (e.target.closest('button[data-maxsave]')) { saveEditMax(); return; }
+  if (e.target.closest('button[data-maxcancel]')) { editingMax = null; renderDayPanel(); return; }
+  if (e.target.closest('button[data-maxpick]') && editingMax) { openHoldPicker(editingMax.set, 'L', renderDayPanel); }
+});
+$('dayPanel').addEventListener('input', function (e) {
+  var el = e.target; if (!editingMax || !el.dataset || !el.dataset.maxk) return;
+  var k = el.dataset.maxk;
+  if (k === 'grip' || k === 'crimp') { editingMax.set.hands.L[k] = el.value; editingMax.set.hands.R[k] = el.value; }
+  else editingMax[k] = el.value;
+});
+$('maxList').addEventListener('click', function (e) {
+  var r = e.target.closest('[data-goto]'); if (!r) return;
+  calSelected = r.dataset.goto;
+  var p = calSelected.split('-'); calMonth = { y: +p[0], m: +p[1] - 1 };
+  renderCalendar();
+  $('dayPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
-$('wDate').value = todayStr();
+function resetWeightForm() {
+  var d = new Date();
+  $('wDate').value = dateStr(d);
+  $('wTime').value = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+resetWeightForm();
 $('btnWSave').addEventListener('click', function () {
-  var kg = parseFloat($('wKg').value), date = $('wDate').value;
+  var kg = parseFloat($('wKg').value), date = $('wDate').value, time = $('wTime').value || '12:00';
   if (!(kg > 0) || !date) { toast('체중과 날짜를 입력하세요.'); return; }
-  addWeight(date, kg); toast(''); $('wKg').value = '';
-  $('wMeasureNote').textContent = date + ' 체중 ' + kg.toFixed(1) + ' kg 저장됨.';
+  var p = date.split('-'), t = time.split(':');
+  var ts = new Date(+p[0], +p[1] - 1, +p[2], +t[0] || 0, +t[1] || 0, 0).getTime();
+  addWeight(ts, kg); toast(''); $('wKg').value = '';
+  $('wMeasureNote').textContent = date + ' ' + time + ' 체중 ' + kg.toFixed(1) + ' kg 저장됨.';
+  resetWeightForm();
 });
 $('btnWMeasure').addEventListener('click', function () {
   showTab('train');
@@ -1937,7 +2075,7 @@ $('btnWMeasure').addEventListener('click', function () {
 });
 $('wEntries').addEventListener('click', function (e) {
   var b = e.target.closest('button[data-del]'); if (!b) return;
-  if (confirm(b.dataset.del + ' 기록을 삭제할까요?')) removeWeight(b.dataset.del);
+  if (confirm('이 체중 기록을 삭제할까요?')) removeWeight(b.dataset.del);
 });
 
 buildHeroSvg();
