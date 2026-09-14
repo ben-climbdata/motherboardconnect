@@ -341,6 +341,7 @@
       <b>노행 루틴 (Abrahangs)</b>은 2021년 30일 실험판으로 10초/50초, 체중의 일정 비율로 당깁니다.
       <b>10분 데일리 노행 (Emil, 10/20)</b>은 팔로우얼롱 영상판으로 10초/20초 × 20회, 각 홀드에서 잰 맥스 행의 40%가 목표입니다.
       <b>맥스 행 (20mm)</b>은 측정값의 90%로 10초 × 6회입니다. %맥스 목표는 같은 홀드·그립·잡는 법의 맥스 행 측정이 먼저 있어야 계산됩니다.
+      같은 이름의 워크아웃이 이미 있으면 세트 구성만 최신 프리셋으로 갱신됩니다. 직접 고친 내용을 지키려면 이름을 바꿔 두세요.
     </div>
   </div>
 
@@ -1013,11 +1014,11 @@ function defaultSet(prev) {
 
 var PRESETS = [
   { name: '노행 루틴 (Abrahangs)', sets: [
-    mkSet('e15', 'four',    '하프 크림프', 10, 50, 3, 75, 'pct', 0),
-    mkSet('e45', 'front3',  '드래그',     10, 50, 3, 75, 'pct', 0),
-    mkSet('p25', 'middle2', '오픈 핸드',  10, 50, 1, 55, 'pct', 0),
-    mkSet('p25', 'front2',  '오픈 핸드',  10, 50, 1, 55, 'pct', 0),
-    mkSet('e20', 'middle2', '하프 크림프', 10, 50, 1, 35, 'pct', 0),
+    mkSet('e15', 'four',    '하프 크림프', 10, 50, 3, 75, 'pct', 50),
+    mkSet('e45', 'front3',  '드래그',     10, 50, 3, 75, 'pct', 50),
+    mkSet('p25', 'middle2', '오픈 핸드',  10, 50, 1, 55, 'pct', 50),
+    mkSet('p25', 'front2',  '오픈 핸드',  10, 50, 1, 55, 'pct', 50),
+    mkSet('e20', 'middle2', '하프 크림프', 10, 50, 1, 35, 'pct', 50),
     mkSet('e20', 'front2',  '하프 크림프', 10, 50, 1, 35, 'pct', 0)
   ] },
   // Emil's "10 Minute Daily Hangboard Routine (FOLLOW ALONG)": 10 s on / 20 s off,
@@ -1037,14 +1038,24 @@ var PRESETS = [
 ];
 
 function addPresets() {
-  var added = [];
+  var added = [], updated = [];
   PRESETS.forEach(function (p) {
-    if (workouts.some(function (w) { return w.name === p.name; })) return;
-    workouts.push({ id: uid(), name: p.name, sets: JSON.parse(JSON.stringify(p.sets)) });
-    added.push(p.name);
+    var sets = JSON.parse(JSON.stringify(p.sets));
+    var existing = null;
+    workouts.forEach(function (w) { if (w.name === p.name) existing = w; });
+    if (existing) {
+      // same name already there: refresh its sets to the current preset definition
+      if (JSON.stringify(existing.sets) !== JSON.stringify(sets)) { existing.sets = sets; updated.push(p.name); }
+    } else {
+      workouts.push({ id: uid(), name: p.name, sets: sets });
+      added.push(p.name);
+    }
   });
   saveWorkouts(); renderWorkoutList();
-  toast(added.length ? '추가됨: ' + added.join(', ') : '프리셋이 이미 있습니다.');
+  var msg = [];
+  if (added.length) msg.push('추가됨: ' + added.join(', '));
+  if (updated.length) msg.push('갱신됨: ' + updated.join(', '));
+  toast(msg.length ? msg.join(' · ') : '프리셋이 이미 최신 상태입니다.');
 }
 
 function saveWorkouts() { store('mb.workouts', workouts); }
