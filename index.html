@@ -337,7 +337,9 @@
     </div>
     <div id="wlist"></div>
     <div class="note" style="padding:8px 0 0">
-      "프리셋 추가"는 에밀 아브라함손의 워크아웃 세 가지를 넣습니다.
+      "프리셋 추가"는 에밀 아브라함손 계열 워크아웃 다섯 가지를 넣습니다.
+      <b>10분 데일리 노행 이지 (2023+ 약지·소지)</b>는 10/20 루틴에 슬로퍼 20°와 약지·소지(뒤 두 손가락) 드래그·크림프를 더한 24회 구성으로, 맥스 측정 없이 체중 비율(45/40/30/20%)로 가볍게 시작하는 버전입니다.
+      <b>맥스 행 이지 (45mm 에지)</b>는 깊은 45mm 에지에서 오픈 핸드로 10초 × 4회, 그 홀드에서 잰 맥스의 80%를 목표로 합니다.
       <b>노행 루틴 (Abrahangs)</b>은 2021년 30일 실험판으로 10초/50초, 체중의 일정 비율로 당깁니다.
       <b>10분 데일리 노행 (Emil, 10/20)</b>은 팔로우얼롱 영상판으로 10초/20초 × 20회, 각 홀드에서 잰 맥스 행의 40%가 목표입니다.
       <b>맥스 행 (20mm)</b>은 측정값의 90%로 10초 × 6회입니다. %맥스 목표는 같은 홀드·그립·잡는 법의 맥스 행 측정이 먼저 있어야 계산됩니다.
@@ -1125,8 +1127,30 @@ var PRESETS = [
     mkSet('e20', 'front2',  '하프 크림프', 10, 20, 2, 40, 'max', 20),
     mkSet('e20', 'middle2', '하프 크림프', 10, 20, 2, 40, 'max', 0)
   ] },
+  // Easy version of the 2023 daily routine, after the HangTime community variant
+  // ("Emil 2023 daily workout improved": adds ring+pinky drag and crimp).
+  // Same 10 s on / 20 s off; targets are conservative % of bodyweight so no
+  // max-hang measurements are needed. Raise the % once it feels effortless.
+  // Holds/sets follow the HangTime screenshots: crimps on the 20 mm edge,
+  // 3-finger drag in the 45 mm pocket, 2-finger drags in the 50 mm pocket,
+  // 2-finger crimps in the 25 mm pocket; ring+pinky sets are a single hang.
+  { name: '10분 데일리 노행 이지 (2023+ 약지·소지)', sets: [
+    mkSet('e20', 'four',    '하프 크림프', 10, 20, 6, 45, 'pct', 20),
+    mkSet('p45', 'front3',  '드래그',     10, 20, 6, 45, 'pct', 20),
+    mkSet('sl20', 'four',   '오픈 핸드',  10, 20, 2, 40, 'pct', 20),
+    mkSet('p50', 'front2',  '드래그',     10, 20, 2, 30, 'pct', 20),
+    mkSet('p50', 'middle2', '드래그',     10, 20, 2, 30, 'pct', 20),
+    mkSet('p50', 'back2',   '드래그',     10, 20, 1, 20, 'pct', 20),
+    mkSet('p25', 'front2',  '하프 크림프', 10, 20, 2, 30, 'pct', 20),
+    mkSet('p25', 'middle2', '하프 크림프', 10, 20, 2, 30, 'pct', 20),
+    mkSet('p25', 'back2',   '하프 크림프', 10, 20, 1, 20, 'pct', 0)
+  ] },
   { name: '맥스 행 (20mm)', sets: [
     mkSet('e20', 'four', '하프 크림프', 10, 120, 6, 90, 'max', 0)
+  ] },
+  // Easy max hangs on the deep 45 mm edge: fewer reps, 80% of the max measured on that hold
+  { name: '맥스 행 이지 (45mm 에지)', sets: [
+    mkSet('e45', 'four', '오픈 핸드', 10, 120, 4, 80, 'max', 0)
   ] }
 ];
 
