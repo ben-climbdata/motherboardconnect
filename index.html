@@ -49,6 +49,8 @@
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
   .dot.live { background: var(--band); }
   .strip .spacer { flex: 1; }
+  .strip button { margin-left: 8px; font-weight: 700; }
+  .strip button.dad { border-color: var(--over); color: var(--over); }
 
   /* ---- tabs ------------------------------------------------------------ */
   .tabs { display: flex; border-bottom: 1px solid var(--line); }
@@ -113,6 +115,16 @@
 
   /* ---- controls -------------------------------------------------------- */
   .controls { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .basic-only { display: none; }
+  body.basic .basic-only { display: flex; padding-bottom: 0; }
+  body.basic .basic-only + .controls { border-top: 0; }
+  body.basic .wsel-row { display: none; }
+  body.basic #btnStart { display: none; }
+  /* 아버지 buttons: yellow for weight, red for the jug hang; running = filled */
+  #btnBasicBW { color: var(--over); border-color: var(--over); background: rgba(242,180,65,.10); }
+  #btnBasicBW.active { background: var(--over); color: #2A1D05; }
+  #btnBasicJug { color: var(--under); border-color: var(--under); background: rgba(255,107,107,.10); }
+  #btnBasicJug.active { background: var(--under); color: #2A0904; }
   button {
     flex: 1; padding: 15px 10px;
     font: inherit; font-size: 15px; font-weight: 650;
@@ -250,6 +262,7 @@
   <span id="status">연결 안 됨</span>
   <span class="spacer"></span>
   <span id="battery"></span>
+  <button type="button" class="xs" id="btnProfile" title="사용자 전환">👤 강성주</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -296,6 +309,10 @@
     </div>
   </div>
 
+  <div class="controls basic-only" id="basicControls">
+    <button id="btnBasicBW" disabled>체중 측정</button>
+    <button id="btnBasicJug" disabled>저그 10초 버티기 (6회)</button>
+  </div>
   <div class="controls">
     <button id="btnConnect" class="primary">기기 연결</button>
     <button id="btnTare" disabled>영점</button>
@@ -327,7 +344,7 @@
       <button type="button" class="sm" id="btnExport">데이터 내보내기</button>
       <button type="button" class="sm" id="btnImport">데이터 가져오기</button>
     </div>
-    <div class="note">워크아웃·훈련 기록·체중·맥스 행은 이 브라우저 안에만 저장됩니다. 다른 기기(아이패드 등)로 옮길 때는 내보내기로 복사한 뒤 그쪽에서 가져오기에 붙여 넣으세요.</div>
+    <div class="note">워크아웃·훈련 기록·체중·맥스 행은 이 브라우저 안에, 사용자별로 따로 저장됩니다. 내보내기·가져오기는 지금 선택된 사용자의 데이터만 다룹니다. 다른 기기(아이패드 등)로 옮길 때는 내보내기로 복사한 뒤 그쪽에서 가져오기에 붙여 넣으세요.</div>
   </details>
 </section>
 
@@ -343,7 +360,7 @@
     </div>
     <div id="wlist"></div>
     <div class="note" style="padding:8px 0 0">
-      "프리셋 추가"는 에밀 아브라함손 계열 워크아웃 다섯 가지를 넣습니다.
+      "프리셋 추가"는 사용자에 따라 다릅니다. 아버지에게는 <b>저그 10초 버티기 (6회)</b>(휴식 25초, 목표 없음)가 들어가고, 강성주에게는 에밀 아브라함손 계열 워크아웃 다섯 가지가 들어갑니다.
       <b>10분 데일리 노행 이지 (2023+ 약지·소지)</b>는 10/20 루틴에 슬로퍼 20°와 약지·소지(뒤 두 손가락) 드래그·크림프를 더한 24회 구성으로, 맥스 측정 없이 체중 비율(45/40/30/20%)로 가볍게 시작하는 버전입니다.
       <b>맥스 행 이지 (45mm 에지)</b>는 깊은 45mm 에지에서 오픈 핸드로 10초 × 4회, 그 홀드에서 잰 맥스의 80%를 목표로 합니다.
       <b>노행 루틴 (Abrahangs)</b>은 2021년 30일 실험판으로 10초/50초, 체중의 일정 비율로 당깁니다.
@@ -447,7 +464,7 @@
       <button class="sm" id="btnWMeasure" disabled style="flex:1">보드에 매달려서 측정</button>
     </div>
     <div class="note" style="padding:8px 0 0" id="wMeasureNote">
-      기기를 연결하면 보드에 팔을 편 채 매달려 체중을 잴 수 있습니다. 훈련 화면으로 넘어가 3초 카운트다운 뒤 10초간 평균을 내고 그날 체중으로 저장합니다.
+      기기를 연결하면 보드에 팔을 편 채 매달려 체중을 잴 수 있습니다. 훈련 화면으로 넘어가 카운트다운(강성주 3초, 아버지 7초) 뒤 10초간 평균을 내고 그날 체중으로 저장합니다.
     </div>
 
     <canvas id="wchart"></canvas>
@@ -489,11 +506,52 @@ var autoTare = null;             // {until, adcs[]} while sampling for the autom
 
 /* ---- storage ---------------------------------------------------------- */
 
+/* Every 'mb.*' key except the profile registry is namespaced per user profile:
+ * 'mb.workouts' is really stored as 'mb.<profileId>.workouts'. */
+var GLOBAL_KEYS = { 'mb.profiles': 1, 'mb.profile': 1 };
+var PROFILE_DATA_KEYS = ['workouts', 'weights', 'logs', 'maxes', 'settings', 'selected', 'measureSet'];
+var profileId = 'me';
+function pk(key) { return GLOBAL_KEYS[key] || key.indexOf('mb.') !== 0 ? key : 'mb.' + profileId + '.' + key.slice(3); }
 function load(key, def) {
-  try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : def; }
+  try { var v = localStorage.getItem(pk(key)); return v ? JSON.parse(v) : def; }
   catch (e) { return def; }
 }
-function store(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* ignore */ } }
+function store(key, val) { try { localStorage.setItem(pk(key), JSON.stringify(val)); } catch (e) { /* ignore */ } }
+
+/* ---- user profiles: exactly two, toggled by the button at the top right --
+ * 강성주 (climber: per-hand force arcs, Emil presets) and 아버지 (basic:
+ * left/right balance seesaw, jug-hang preset). */
+var profiles = [
+  { id: 'me',  name: '강성주', kind: 'climber' },
+  { id: 'dad', name: '아버지', kind: 'basic' }
+];
+(function initProfiles() {
+  try {
+    var stored = load('mb.profiles', null);
+    if (!stored || !stored.length) {
+      // first run with profiles: move the old single-user data under "me"
+      PROFILE_DATA_KEYS.forEach(function (k) {
+        var old = localStorage.getItem('mb.' + k);
+        if (old !== null) { localStorage.setItem('mb.me.' + k, old); localStorage.removeItem('mb.' + k); }
+      });
+    } else {
+      // an earlier build let users add profiles freely: keep data of one named 아버지
+      stored.forEach(function (p) {
+        if (p.name === '아버지' && p.id !== 'dad') {
+          PROFILE_DATA_KEYS.forEach(function (k) {
+            var v = localStorage.getItem('mb.' + p.id + '.' + k);
+            if (v !== null && localStorage.getItem('mb.dad.' + k) === null) localStorage.setItem('mb.dad.' + k, v);
+          });
+        }
+      });
+    }
+    store('mb.profiles', profiles);
+  } catch (e) { /* ignore */ }
+})();
+profileId = load('mb.profile', 'me');
+if (profileId !== 'me' && profileId !== 'dad') profileId = 'me';
+function currentProfile() { return profileId === 'dad' ? profiles[1] : profiles[0]; }
+function isBalanceMode() { return currentProfile().kind === 'basic'; }
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
 function dateStr(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
 function todayStr() { return dateStr(new Date()); }
@@ -1185,9 +1243,17 @@ var PRESETS = [
   ] }
 ];
 
+// presets for "basic" (balance) profiles, e.g. a simple jug hang
+var PRESETS_BASIC = [
+  { name: '저그 10초 버티기 (6회)', sets: [
+    mkSet('jug', 'four', '오픈 핸드', 10, 25, 6, 0, 'kg', 0)     // target 0 = no target, just hold
+  ] }
+];
+function presetsForProfile() { return isBalanceMode() ? PRESETS_BASIC : PRESETS; }
+
 function addPresets() {
   var added = [], updated = [];
-  PRESETS.forEach(function (p) {
+  presetsForProfile().forEach(function (p) {
     var sets = JSON.parse(JSON.stringify(p.sets));
     var existing = null;
     workouts.forEach(function (w) { if (w.name === p.name) existing = w; });
@@ -1211,7 +1277,7 @@ function findWorkout(id) { for (var i = 0; i < workouts.length; i++) if (workout
 function setDuration(s) { return s.reps * s.work + Math.max(0, s.reps - 1) * s.rest; }
 function workoutDuration(w) { var t = 0; w.sets.forEach(function (s, i) { t += setDuration(s) + (i < w.sets.length - 1 ? s.setrest : 0); }); return t; }
 function fmtDur(sec) { var m = Math.floor(sec / 60), s = Math.round(sec % 60); return m ? m + '분' + (s ? ' ' + s + '초' : '') : s + '초'; }
-function targetLabel(s) { return s.unit === 'pct' ? s.target + '% 체중' : s.unit === 'max' ? s.target + '% 맥스' : s.target + ' kg'; }
+function targetLabel(s) { return !(s.target > 0) ? '목표 없음' : s.unit === 'pct' ? s.target + '% 체중' : s.unit === 'max' ? s.target + '% 맥스' : s.target + ' kg'; }
 function setSummary(s) { return setLabel(s) + ' · ' + s.work + 's/' + s.rest + 's × ' + s.reps + ' · ' + targetLabel(s); }
 
 function renderWorkoutList() {
@@ -1284,7 +1350,7 @@ function renderEditorSets() {
     if (s.same) html += '<div class="hands one">' + handEditor(i, 'L', s.hands.L, '<b>양손</b> · 홀드 / 그립 / 잡는 법') + '</div>';
     else html += '<div class="hands">' + handEditor(i, 'L', s.hands.L, '<b>왼손</b>') + handEditor(i, 'R', s.hands.R, '<b>오른손</b>') + '</div>';
     html += '<div class="grid">'
-      + '<div class="targetcell"><label>목표</label><div class="unitrow">'
+      + '<div class="targetcell"><label>목표 (0이면 목표 없음)</label><div class="unitrow">'
       + '<input type="number" inputmode="decimal" step="0.5" min="0" data-i="' + i + '" data-k="target" value="' + esc(s.target) + '">'
       + '<select data-i="' + i + '" data-k="unit">'
       + '<option value="kg"' + (s.unit === 'kg' ? ' selected' : '') + '>kg</option>'
@@ -1318,10 +1384,10 @@ function saveEditor() {
     s.target = Math.max(0, num(s.target, 0));
     s.setrest = Math.max(0, num(s.setrest, 120));
     if (s.unit !== 'pct' && s.unit !== 'max') s.unit = 'kg';
-    if (!(s.target > 0)) bad = true;
+    if (s.target < 0) bad = true;
   });
   if (noHold) { toast('홀드를 선택하지 않은 세트가 있습니다.'); return; }
-  if (bad) { toast('목표는 0보다 커야 합니다.'); return; }
+  if (bad) { toast('목표는 0 이상이어야 합니다 (0이면 목표 없음).'); return; }
   var idx = workouts.findIndex(function (w) { return w.id === editing.id; });
   if (idx >= 0) workouts[idx] = editing; else workouts.push(editing);
   saveWorkouts();
@@ -1483,7 +1549,8 @@ function startSession() {
   toast('');
   S.mode = m; S.samples = null; S.result = null;
   S.phase = 'ready'; S.rep = 0; S.set = 1; S.lastBeep = -1;
-  S.start = performance.now(); S.until = S.start + 3000;
+  // lead-in before the first hang / measurement: 3 s, 7 s for 아버지
+  S.start = performance.now(); S.until = S.start + (isBalanceMode() ? 7000 : 3000);
   if (!m) beginRecord();
   $('btnStart').textContent = '중지'; $('btnStart').className = 'stop';
   $('wsel').disabled = true;
@@ -1612,6 +1679,7 @@ function layoutHero() {
 }
 
 function updateArcs(tgt, T, judging, ref) {
+  if (isBalanceMode()) { updateArcsBalance(judging); return; }
   var half = ref / 2;
   [['L', live.left], ['R', live.right]].forEach(function (h) {
     var side = h[0], v = h[1];
@@ -1623,6 +1691,27 @@ function updateArcs(tgt, T, judging, ref) {
     if (judging && tgt > 0) color = v < half - T ? '#FF6B6B' : v > half + T ? '#F2B441' : '#33D48F';
     seg.setAttribute('stroke', color);
     $('hand' + side).textContent = readingAvailable() ? v.toFixed(1) : '';
+  });
+}
+
+/* balance profile: the two arcs act like a seesaw. The hand carrying more
+ * load sinks, the lighter hand rises; level (50:50) is the centre tick and
+ * the arcs span 25 %..75 %. Both markers share one colour by imbalance:
+ * within ±5 points green, up to ±12 yellow, beyond that red. */
+var BALANCE_OK = 0.05, BALANCE_WARN = 0.12;
+function updateArcsBalance(judging) {
+  var tot = live.left + live.right;
+  var shareL = tot > 2 ? live.left / tot : 0.5;
+  var diff = Math.abs(shareL - 0.5);
+  var color = '#E8EDEF';
+  if (judging && tot > 2) color = diff <= BALANCE_OK ? '#33D48F' : diff <= BALANCE_WARN ? '#F2B441' : '#FF6B6B';
+  [['L', shareL], ['R', 1 - shareL]].forEach(function (h) {
+    var side = h[0], share = h[1];
+    var a = clamp(fracToAngle(1 + (0.5 - share) * 2), -ARC.maxA + 6, ARC.maxA - 6);   // 50 % = centre; heavier side goes down
+    var seg = $('seg' + side);
+    seg.setAttribute('d', arcPath(side, a - 6, a + 6));
+    seg.setAttribute('stroke', color);
+    $('hand' + side).textContent = readingAvailable() && tot > 2 ? Math.round(share * 100) + '%' : '';
   });
 }
 
@@ -1668,7 +1757,8 @@ function frame() {
   var state = 'idle';
   var tgt = isFinite(c.target) ? c.target : 0;
   if (S.phase === 'hang') {
-    if (f < tgt - T) state = 'under'; else if (f > tgt + T) state = 'over'; else state = 'in';
+    if (tgt <= 0) state = 'in';                       // no target: just hold
+    else if (f < tgt - T) state = 'under'; else if (f > tgt + T) state = 'over'; else state = 'in';
     accumulate(f, dt);
   }
   tone(state === 'in' ? 'idle' : state);
@@ -1699,9 +1789,13 @@ function frame() {
     sub = (S.mode === 'bw' ? '체중 ' : '맥스 행 ') + S.result.kg.toFixed(1) + ' kg 저장됨 · 최대 ' + S.result.peak.toFixed(1);
   } else {
     pill.className = 'loadpill' + (state !== 'idle' ? ' ' + state : '');
-    if (measuring) sub = S.phase === 'measure' ? '10초 평균 측정 중' : '3초 뒤 측정 시작';
+    if (measuring) sub = S.phase === 'measure' ? '10초 평균 측정 중' : Math.ceil(remain) + '초 뒤 측정 시작';
     else if (avail && tgt > 0) sub = '목표의 ' + Math.round(f / tgt * 100) + '%';
-    if (state === 'under') sub += ' · 더 당기세요'; else if (state === 'over') sub += ' · 힘을 빼세요'; else if (state === 'in') sub += ' · 유지';
+    if (state === 'under') sub += ' · 더 당기세요'; else if (state === 'over') sub += ' · 힘을 빼세요'; else if (state === 'in') sub += tgt > 0 ? ' · 유지' : '버티세요';
+    if (isBalanceMode() && avail && f > 2) {
+      var shL = Math.round(live.left / (live.left + live.right) * 100);
+      sub = (sub ? sub + ' · ' : '') + '좌우 ' + shL + ' : ' + (100 - shL);
+    }
   }
   $('loadSub').textContent = sub;
 
@@ -1710,16 +1804,17 @@ function frame() {
   var gl, tl;
   if (S.mode === 'bw' || (idle && mode() === 'bw')) {
     gl = '체중 측정';
-    tl = '팔을 펴고 매달리세요 · 3초 카운트 후 10초 평균 · ' + (latestWeight() ? '최근 ' + latestWeight().kg.toFixed(1) + ' kg (' + fmtDate(latestWeight().date) + ')' : '기록 없음');
+    tl = '팔을 펴고 매달리세요 · ' + (isBalanceMode() ? 7 : 3) + '초 카운트 후 10초 평균 · ' + (latestWeight() ? '최근 ' + latestWeight().kg.toFixed(1) + ' kg (' + fmtDate(latestWeight().date) + ')' : '기록 없음');
   } else if (S.mode === 'max' || (idle && mode() === 'max')) {
     var lm = latestMaxFor(measureSet.hands.L);
     gl = '맥스 행 측정 · ' + esc(handLabel(measureSet.hands.L));
     tl = '최대 중량으로 10초 유지 · ' + (lm ? '최근 ' + lm.kg.toFixed(1) + ' kg (' + fmtDate(lm.date) + ')' : '이 그립은 첫 측정');
   } else {
     gl = c.desc ? esc(c.desc) : esc(c.label);
-    tl = isFinite(c.target) ? '목표 ' + c.target.toFixed(1) + ' kg' : '목표 계산 불가 (' + (c.unit === 'max' ? '맥스 행 측정 필요' : '체중 기록 필요') + ')';
-    if (c.unit === 'pct') tl += ' (' + c.rawTarget + '% 체중)';
-    if (c.unit === 'max') tl += ' (' + c.rawTarget + '% 맥스)';
+    if (!(c.rawTarget > 0)) tl = '목표 없음 · 버티기만';
+    else tl = isFinite(c.target) ? '목표 ' + c.target.toFixed(1) + ' kg' : '목표 계산 불가 (' + (c.unit === 'max' ? '맥스 행 측정 필요' : '체중 기록 필요') + ')';
+    if (c.rawTarget > 0 && c.unit === 'pct') tl += ' (' + c.rawTarget + '% 체중)';
+    if (c.rawTarget > 0 && c.unit === 'max') tl += ' (' + c.rawTarget + '% 맥스)';
     tl += ' · ' + c.hang + 's 매달림 / ' + c.rest + 's 휴식 × ' + c.reps + '회';
     if (plan.length > 1 && !idle) gl = (S.phase === 'setrest' ? '다음 세트 ' : '세트 ') + S.set + '/' + plan.length + ' · ' + gl;
   }
@@ -1728,6 +1823,7 @@ function frame() {
 
   if (live.battery !== null) $('battery').textContent = '배터리 ' + live.battery + '%';
   $('btnWMeasure').disabled = !avail || !idle;
+  if (isBalanceMode()) renderBasicButtons();
 
   if (connected) {
     var sm = live.sensors;
@@ -2066,6 +2162,59 @@ $('holdChips').addEventListener('click', function (e) { var b = e.target.closest
 $('btnHoldClose').addEventListener('click', closeHoldPicker);
 $('holdOverlay').addEventListener('click', function (e) { if (e.target === this) closeHoldPicker(); });
 $('dataOverlay').addEventListener('click', function (e) { if (e.target === this) this.hidden = true; });
+
+/* ---- profile switcher: the top-right button toggles 강성주 <-> 아버지 ----- */
+
+function renderProfileButton() {
+  var p = currentProfile();
+  $('btnProfile').textContent = '👤 ' + p.name;
+  $('btnProfile').className = 'xs' + (p.id === 'dad' ? ' dad' : '');
+  $('btnProfile').title = (p.id === 'dad' ? '강성주' : '아버지') + '로 전환';
+}
+function switchProfile(id) {
+  if (S.phase !== 'idle' && S.phase !== 'done') stopSession();
+  store('mb.profile', id);
+  location.reload();                    // all per-profile data is re-read on load
+}
+$('btnProfile').addEventListener('click', function () { switchProfile(profileId === 'dad' ? 'me' : 'dad'); });
+renderProfileButton();
+
+// 아버지 starts with the jug-hang workout ready to go
+if (profileId === 'dad' && !workouts.length) { addPresets(); toast(''); }
+
+/* basic profile: no workout dropdown, two big buttons instead ------------- */
+if (isBalanceMode()) document.body.classList.add('basic');
+function jugWorkout() {
+  var w = null;
+  workouts.forEach(function (x) { if (!w && x.name.indexOf('저그') === 0) w = x; });
+  return w || workouts[0] || null;
+}
+function basicStart(kind) {
+  if (S.phase !== 'idle' && S.phase !== 'done') { stopSession(); return; }
+  if (kind === 'bw') { $('wsel').value = 'measure:bw'; }
+  else {
+    var w = jugWorkout();
+    if (!w) { toast('저그 버티기 워크아웃이 없습니다. 워크아웃 탭에서 프리셋 추가를 누르세요.'); return; }
+    $('wsel').value = w.id; selectedWorkoutId = w.id; store('mb.selected', w.id);
+  }
+  onModeChange();
+  startSession();
+}
+function renderBasicButtons() {
+  if (!isBalanceMode()) return;
+  var running = S.phase !== 'idle' && S.phase !== 'done';
+  var m = mode();
+  $('btnBasicBW').disabled = !connected;
+  $('btnBasicJug').disabled = !connected;
+  $('btnBasicBW').className = running && m === 'bw' ? 'active' : '';
+  $('btnBasicJug').className = running && !m ? 'active' : '';
+  $('btnBasicBW').textContent = running && m === 'bw' ? '측정 중 · 중지' : '체중 측정';
+  $('btnBasicJug').textContent = running && !m ? '진행 중 · 중지' : '저그 10초 버티기 (6회)';
+}
+$('btnBasicBW').addEventListener('click', function () { basicStart('bw'); });
+$('btnBasicJug').addEventListener('click', function () { basicStart('jug'); });
+// show the jug workout on the training screen by default
+if (isBalanceMode() && !findWorkout(selectedWorkoutId) && jugWorkout()) { selectedWorkoutId = jugWorkout().id; store('mb.selected', selectedWorkoutId); }
 
 $('calPrev').addEventListener('click', function () { calMonth.m--; if (calMonth.m < 0) { calMonth.m = 11; calMonth.y--; } renderCalendar(); });
 $('calNext').addEventListener('click', function () { calMonth.m++; if (calMonth.m > 11) { calMonth.m = 0; calMonth.y++; } renderCalendar(); });
