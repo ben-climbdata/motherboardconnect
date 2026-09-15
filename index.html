@@ -68,6 +68,9 @@
   .wsel-row select { flex: 1; }
   .gripline { padding: 8px 16px 0; font-size: 14px; color: var(--accent); font-weight: 600; min-height: 26px; line-height: 1.4; }
   .gripline small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .miniboard { padding: 6px 16px 0; }
+  .miniboard[hidden] { display: none; }
+  .miniboard svg { display: block; width: 100%; max-width: 400px; height: auto; border-radius: 6px; margin: 0 auto; }
   .measure-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 6px; padding: 8px 16px 0; }
   .measure-row[hidden] { display: none; }
   .measure-row select, .measure-row .holdbtn { padding: 8px; font-size: 13px; }
@@ -264,6 +267,9 @@
     <select id="wsel"><option value="">빠른 훈련 (설정값 사용)</option></select>
   </div>
   <div class="gripline" id="gripLine"></div>
+  <div class="miniboard" id="miniBoardWrap" hidden>
+    <svg id="miniBoard" viewBox="0 0 1548 430" preserveAspectRatio="xMidYMid meet" aria-label="현재 세트 홀드 위치"></svg>
+  </div>
   <div class="measure-row" id="measureRow" hidden>
     <button type="button" class="holdbtn" id="mHold"><span class="hn">홀드</span><span class="arrow">보드 ▸</span></button>
     <select id="mGrip" aria-label="그립"></select>
@@ -974,6 +980,31 @@ function buildBoardSvg() {
   svg.innerHTML = s;
 }
 
+/* small board on the training screen showing the current set's holds ---- */
+var miniKey = '';
+function renderMiniBoard(hands) {
+  var key = hands ? (hands.L.holdId || '') + '|' + (hands.R.holdId || '') : '';
+  if (key === miniKey) return;
+  miniKey = key;
+  var wrap = $('miniBoardWrap');
+  if (!hands || (!hands.L.holdId && !hands.R.holdId)) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  var same = hands.L.holdId === hands.R.holdId;
+  var s = '<image href="' + BOARD_IMG + '" x="0" y="0" width="1548" height="430" preserveAspectRatio="none" opacity=".85"/>';
+  function mark(holdId, wantSide, label) {
+    var h = holdById(holdId); if (!h) return;
+    h.rects.forEach(function (r, idx) {
+      var side = h.rects.length === 1 ? 'C' : (idx === 0 ? 'L' : 'R');
+      if (side !== 'C' && side !== wantSide) return;
+      s += '<rect x="' + r[0] + '" y="' + r[1] + '" width="' + r[2] + '" height="' + r[3] + '" rx="26" fill="rgba(51,212,143,.45)" stroke="#33D48F" stroke-width="10"/>';
+      if (label) s += '<text x="' + (r[0] + r[2] / 2) + '" y="' + (r[1] + r[3] / 2 + 16) + '" text-anchor="middle" font-size="44" font-weight="800" fill="#06231A">' + label + '</text>';
+    });
+  }
+  mark(hands.L.holdId, 'L', same ? '' : 'L');
+  mark(hands.R.holdId, 'R', same ? '' : 'R');
+  $('miniBoard').innerHTML = s;
+}
+
 function markBoardSelection(id, hand) {
   var rects = $('boardSvg').querySelectorAll('.hold');
   for (var i = 0; i < rects.length; i++) {
@@ -1357,12 +1388,13 @@ function resolveTarget(s) {
 }
 function workoutPlan(w) {
   return w.sets.map(function (s) {
-    return { label: w.name, desc: setLabel(s), hang: s.work, rest: s.rest, reps: s.reps,
+    return { label: w.name, desc: setLabel(s), hands: s.hands, hang: s.work, rest: s.rest, reps: s.reps,
              target: resolveTarget(s), setrest: s.setrest, unit: s.unit, rawTarget: s.target };
   });
 }
 function measurePlan(m) {
   return [{ label: m === 'bw' ? '체중 측정' : '맥스 행 측정', desc: m === 'max' ? handLabel(measureSet.hands.L) : '',
+            hands: m === 'max' ? measureSet.hands : null,
             hang: MEASURE_SECONDS, rest: 0, reps: 1, target: 0, setrest: 0, unit: 'kg', rawTarget: 0 }];
 }
 function buildPlan() {
@@ -1692,6 +1724,7 @@ function frame() {
     if (plan.length > 1 && !idle) gl = (S.phase === 'setrest' ? '다음 세트 ' : '세트 ') + S.set + '/' + plan.length + ' · ' + gl;
   }
   $('gripLine').innerHTML = gl + '<small>' + tl + '</small>';
+  renderMiniBoard(c.hands || null);
 
   if (live.battery !== null) $('battery').textContent = '배터리 ' + live.battery + '%';
   $('btnWMeasure').disabled = !avail || !idle;
